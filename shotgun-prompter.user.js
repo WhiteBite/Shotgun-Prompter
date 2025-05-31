@@ -21,10 +21,11 @@
 
     // console.log("[Shotgun Prompter] Script execution started (v0.4.9).");
 
-    const SCRIPT_VERSION = GM_info.script.version;
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A';
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
     const SCRIPT_PREFIX = 'shotgun_prompter_';
+    const OFFICIAL_PROMPT_TEMPLATES_URL = GITHUB_RAW_CONTENT_URL + "prompt_templates.json";
     const LAST_VERSION_CHECK_KEY = SCRIPT_PREFIX + 'last_version_check_timestamp';
     const CHECK_VERSION_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -48,6 +49,7 @@
     const TRUNCATE_VALUE_KEY = SCRIPT_PREFIX + 'truncate_value';
     const SKIP_BINARY_FILES_KEY = SCRIPT_PREFIX + 'skip_binary_files';
 
+    const FOLDER_EXPANSION_STATE_KEY = SCRIPT_PREFIX + 'folder_expansion_state';
 
     const DEFAULT_PROMPT_TEMPLATE_CONTENT = `Your primary goal is to generate a git diff.
 Follow the user's instructions carefully.
@@ -88,17 +90,16 @@ Pay attention to the file paths provided in the context.`;
     function logHelper(message) { console.log(`[Shotgun Prompter] ${message}`); }
     function updateStatus(message, isError = false, isVersionCheck = false) {
         const targetDiv = isVersionCheck ? versionStatusDiv : statusDiv;
-        if (targetDiv) {
-            if (isVersionCheck && !isError && message.includes("<a")) { // Check if message is HTML for link
-                 targetDiv.innerHTML = message;
-                 targetDiv.style.color = 'blue';
-                 targetDiv.style.cursor = 'pointer'; // Make it look clickable
-            } else {
-                targetDiv.textContent = message;
-                targetDiv.style.color = isError ? 'red' : (message.includes("Generating") || message.includes("Processing") ? 'orange' : 'green');
-                targetDiv.style.cursor = 'default';
-            }
+        if (!targetDiv) return;
+
+        if (isVersionCheck && !isError && typeof message !== 'string') { // If message is a node/fragment for version check
+            targetDiv.innerHTML = ''; // Clear previous content
+            targetDiv.appendChild(message);
+            return;
         }
+        targetDiv.textContent = message;
+        targetDiv.style.color = isError ? 'red' : (message.includes("Generating") || message.includes("Processing") ? 'orange' : 'green');
+        targetDiv.style.cursor = 'default';
         // if (!isVersionCheck) logHelper(message); // Avoid logging version checks too often
     }
     function copyToClipboard(text, buttonElement, successMessage = "Copied!") {
@@ -207,6 +208,27 @@ Pay attention to the file paths provided in the context.`;
         if(contextTextarea) contextTextarea.value = ''; generatedContext = ''; if(copyContextBtn) copyContextBtn.disabled = true;
         if(finalPromptTextarea) finalPromptTextarea.value = ''; if(copyPromptBtn) copyPromptBtn.disabled = true;
         updateStatus(`${projectFiles.length} files/folders found. Review exclusions and generate context.`); updateStats();
+        // Persist default expansion state for a new folder if needed (all expanded)
+        persistCurrentExpansionState(displayTreeRoot);
+    }
+
+    function getPersistedExpansionState() {
+        return GM_getValue(FOLDER_EXPANSION_STATE_KEY, {});
+    }
+
+    function persistCurrentExpansionState(rootTreeObject) {
+        const states = {};
+        function traverse(node, pathParts) { // pathParts is the path to the current node
+            const currentPath = pathParts.join('/');
+            if (node._isDir) {
+                states[currentPath] = node._expanded;
+                Object.values(node._children).forEach(childNode => {
+                    traverse(childNode, [...pathParts, childNode._name]);
+                });
+            }
+        }
+        Object.values(rootTreeObject).forEach(rootNode => { traverse(rootNode, [rootNode._name]); });
+        GM_setValue(FOLDER_EXPANSION_STATE_KEY, states);
     }
 
     function findNodeInTree(treeObject, pathArray) {
@@ -223,16 +245,26 @@ Pay attention to the file paths provided in the context.`;
 
     function buildDisplayTreeAndSetExclusion(files) {
         const newTree = {};
+        const persistedExpansionStates = getPersistedExpansionState();
+
         files.forEach((pf) => {
             const parts = pf.relPath.split('/'); let currentLevel = newTree; let pathSoFarArray = [];
             parts.forEach((part, index) => {
                 pathSoFarArray.push(part);
                 const nodeId = SCRIPT_PREFIX + 'node_' + pathSoFarArray.join('_').replace(/[^a-zA-Z0-9_]/g, '_');
                 if (!currentLevel[part]) {
-                    const existingNodeInOldTree = findNodeInTree(displayTreeRoot, pathSoFarArray);
-                    currentLevel[part] = { _name: part, _isDir: index < parts.length - 1, _pf: null, _children: {}, _id: nodeId, _excluded: false, _expanded: existingNodeInOldTree ? existingNodeInOldTree._expanded : true };
+                    const isDirNode = index < parts.length - 1;
+                    const nodePathForExpansion = pathSoFarArray.join('/');
+                    let expandedState = true; // Default for new dirs
+                    if (isDirNode && persistedExpansionStates[nodePathForExpansion] !== undefined) {
+                        expandedState = persistedExpansionStates[nodePathForExpansion];
+                    }
+                    currentLevel[part] = { _name: part, _isDir: isDirNode, _pf: null, _children: {}, _id: nodeId, _excluded: false, 
+                                           _expanded: isDirNode ? expandedState : undefined };
                 }
-                if (index === parts.length - 1) { currentLevel[part]._isDir = false; currentLevel[part]._pf = pf; currentLevel[part]._excluded = pf.excluded; }
+                if (index === parts.length - 1) { // This is the file node or an empty directory treated as file if path ends with /
+                    currentLevel[part]._isDir = false; // Ensure it's marked as not a directory for rendering purposes if it's a file
+                    currentLevel[part]._pf = pf; currentLevel[part]._excluded = pf.excluded; }
                 currentLevel = currentLevel[part]._children;
             });
         });
@@ -253,13 +285,21 @@ Pay attention to the file paths provided in the context.`;
             if(generateContextBtn) generateContextBtn.disabled = !projectFiles.some(pf => !pf.excluded);
         }
     }
+
     function toggleNodeExpansion(node, expand, isRecursiveCall = false) {
         if (node && node._isDir) {
             node._expanded = expand;
-            Object.values(node._children).forEach(child => toggleNodeExpansion(child, expand, true));
+            // If this is a direct click (not recursive part of expand/collapse all),
+            // it should not recursively expand/collapse children unless that's the desired behavior for single click.
+            // Standard tree behavior: single click only toggles immediate node.
+            // The `isRecursiveCall` here is more for the "Expand/Collapse All" functionality.
         }
-        if (!isRecursiveCall) renderFileList();
+        if (!isRecursiveCall) { // Top-level call (e.g. user click on one expander)
+            persistCurrentExpansionState(displayTreeRoot);
+            renderFileList();
+        }
     }
+
     function renderTreeRecursiveDOM(currentLevelData, parentUl) {
         const keys = Object.keys(currentLevelData).sort((a, b) => {
             const itemA = currentLevelData[a]; const itemB = currentLevelData[b];
@@ -278,7 +318,7 @@ Pay attention to the file paths provided in the context.`;
             checkbox.addEventListener('change', () => { const isChecked = checkbox.checked; setChildrenChecked(item, isChecked); });
             entryDiv.appendChild(checkbox); const iconSpan = document.createElement('span'); iconSpan.className = 'shotgun-tree-icon';
             if (item._isDir) {
-                const expander = createElementWithProps('span', { class: 'shotgun-tree-expander', textContent: item._expanded ? '▼ ' : '▶ ' });
+                const expander = createElementWithProps('span', { class: 'shotgun-tree-expander', textContent: item._expanded ? '▼' : '▶' });
                 expander.onclick = () => { item._expanded = !item._expanded; renderFileList(); };
                 iconSpan.appendChild(expander);
             }
@@ -516,11 +556,24 @@ Pay attention to the file paths provided in the context.`;
         fileInputContainer.appendChild(fileInputTriggerBtn); fileInputContainer.appendChild(fileInput); fileInputContainer.appendChild(folderInputLabel); leftPanelElement.appendChild(fileInputContainer);
         const fileListHeader = createElementWithProps('div', { class: 'shotgun-file-list-header' });
         fileListHeader.appendChild(createElementWithProps('h4', { textContent: 'Selected Files:' }));
+        
+        function setAllNodesExpansion(expandState) {
+            function recurseSet(node, state) {
+                if (node && node._isDir) {
+                    node._expanded = state;
+                    Object.values(node._children).forEach(child => recurseSet(child, state));
+                }
+            }
+            Object.values(displayTreeRoot).forEach(rootNode => recurseSet(rootNode, expandState));
+            persistCurrentExpansionState(displayTreeRoot);
+            renderFileList();
+        }
+
         const fileListControls = createElementWithProps('div', {class: 'shotgun-file-list-controls'});
         const expandAllBtn = createElementWithProps('button', {class: 'shotgun-button shotgun-button-small', textContent: 'Разв. все'});
-        expandAllBtn.onclick = () => { Object.values(displayTreeRoot).forEach(node => toggleNodeExpansion(node, true)); };
+        expandAllBtn.onclick = () => setAllNodesExpansion(true);
         const collapseAllBtn = createElementWithProps('button', {class: 'shotgun-button shotgun-button-small', textContent: 'Сверн. все'});
-        collapseAllBtn.onclick = () => { Object.values(displayTreeRoot).forEach(node => toggleNodeExpansion(node, false)); };
+        collapseAllBtn.onclick = () => setAllNodesExpansion(false);
         const selectAllBtn = createElementWithProps('button', {class: 'shotgun-button shotgun-button-small', textContent: 'Выбр. все'});
         selectAllBtn.onclick = () => { projectFiles.forEach(pf => pf.excluded = false); displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); renderFileList(); if(generateContextBtn) generateContextBtn.disabled = projectFiles.length === 0; };
         const deselectAllBtn = createElementWithProps('button', {class: 'shotgun-button shotgun-button-small', textContent: 'Снять все'});
@@ -550,8 +603,11 @@ Pay attention to the file paths provided in the context.`;
         const modalFooter = createElementWithProps('div', { class: 'shotgun-modal-footer' });
         statusDiv = createElementWithProps('div', { class: 'shotgun-status', textContent: 'Ready.' });
         versionStatusDiv = createElementWithProps('div', { class: 'shotgun-version-status'}); // Version status div
+        const currentVersionSpan = createElementWithProps('div', { class: 'shotgun-current-script-version', textContent: `v${SCRIPT_VERSION}` });
+
         modalFooter.appendChild(versionStatusDiv); // Add version status first
-        modalFooter.appendChild(statusDiv);      // Then regular status
+        modalFooter.appendChild(statusDiv);      // Then regular status (will grow)
+        modalFooter.appendChild(currentVersionSpan); // Then current script version
         modalContent.appendChild(modalHeader); modalContent.appendChild(modalBody); modalContent.appendChild(modalFooter);
         modal.appendChild(modalContent);
         if (document.body) document.body.appendChild(modal); else { console.error("[Shotgun Prompter] document.body not available."); return; }
@@ -596,25 +652,30 @@ Pay attention to the file paths provided in the context.`;
     }
     function renderSettingsTemplateList() {
         if (!settingsTemplateListDiv) return; while (settingsTemplateListDiv.firstChild) { settingsTemplateListDiv.removeChild(settingsTemplateListDiv.firstChild); }
-        promptTemplates.forEach(template => { const itemDiv = createElementWithProps('div', { class: 'shotgun-settings-list-item' + (template.id === settingsSelectedTemplateId ? ' selected' : ''), textContent: template.name + (template.isCore ? ' (Core)' : ''), onclick: () => selectTemplateForEditing(template.id) }); settingsTemplateListDiv.appendChild(itemDiv); });
+        promptTemplates.forEach(template => {
+            let displayName = template.name;
+            if (template.isOfficial) displayName += ' (Official)'; 
+            else if (template.isCore && !template.isOfficial) displayName += ' (Core)'; // Ensure "Official" takes precedence if isCore is also true
+            const itemDiv = createElementWithProps('div', { class: 'shotgun-settings-list-item' + (template.id === settingsSelectedTemplateId ? ' selected' : ''), textContent: displayName, onclick: () => selectTemplateForEditing(template.id) }); settingsTemplateListDiv.appendChild(itemDiv); });
     }
     function selectTemplateForEditing(templateId) {
         const template = promptTemplates.find(t => t.id === templateId);
-        if (template && settingsTemplateNameInput && settingsTemplateContentTextarea) {
+        if (template && settingsTemplateNameInput && settingsTemplateContentTextarea && settingsTemplateListDiv) {
             settingsSelectedTemplateId = template.id; settingsTemplateNameInput.value = template.name; settingsTemplateContentTextarea.value = template.content;
             settingsTemplateNameInput.disabled = !!template.isCore; settingsTemplateContentTextarea.disabled = !!template.isCore;
             Array.from(settingsTemplateListDiv.children).forEach(child => {
                 child.classList.remove('selected'); if (child.textContent.startsWith(template.name)) child.classList.add('selected');
             });
-            const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = !!template.isCore;
+            // Core or Official templates cannot be deleted or modified (name/content fields are disabled)
+            const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = !!(template.isCore || template.isOfficial);
         }
     }
     function clearTemplateEditFields() {
-        if (settingsTemplateNameInput && settingsTemplateContentTextarea) {
+        if (settingsTemplateNameInput && settingsTemplateContentTextarea && settingsTemplateListDiv) {
             settingsSelectedTemplateId = null; settingsTemplateNameInput.value = ''; settingsTemplateContentTextarea.value = '';
             settingsTemplateNameInput.disabled = false; settingsTemplateContentTextarea.disabled = false;
             Array.from(settingsTemplateListDiv.children).forEach(child => child.classList.remove('selected'));
-            const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = true;
+            const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = true; // No template selected, so disable delete
         }
     }
     function handleSaveTemplate() {
@@ -623,7 +684,7 @@ Pay attention to the file paths provided in the context.`;
         if (settingsSelectedTemplateId) {
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
             if (template && !template.isCore) { template.name = name; template.content = content; }
-            else if (template && template.isCore) { updateStatus("Core templates cannot be modified. Save as new instead.", true); return; }
+            else if (template && (template.isCore || template.isOfficial)) { updateStatus("Core/Official templates cannot be modified directly. Save as new instead.", true); return; }
         } else {
             const newId = SCRIPT_PREFIX + 'tpl_' + Date.now();
             promptTemplates.push({ id: newId, name: name, content: content, isCore: false });
@@ -636,7 +697,7 @@ Pay attention to the file paths provided in the context.`;
     function handleDeleteTemplate() {
         if (settingsSelectedTemplateId) {
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
-            if (template && template.isCore) { updateStatus("Core templates cannot be deleted.", true); return; }
+            if (template && (template.isCore || template.isOfficial)) { updateStatus("Core/Official templates cannot be deleted.", true); return; }
             if (template && confirm(`Are you sure you want to delete template "${template.name}"?`)) {
                 const deletedId = settingsSelectedTemplateId;
                 promptTemplates = promptTemplates.filter(t => t.id !== settingsSelectedTemplateId);
@@ -702,6 +763,38 @@ Pay attention to the file paths provided in the context.`;
         reader.readAsText(file);
     }
 
+    function fetchOfficialPromptTemplates() {
+        updateStatus("Fetching official prompt templates...", false);
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: OFFICIAL_PROMPT_TEMPLATES_URL + "?t=" + Date.now(), // Cache buster
+            onload: function(response) {
+                try {
+                    const officialTemplates = JSON.parse(response.responseText);
+                    if (!Array.isArray(officialTemplates)) throw new Error("Invalid format for official templates.");
+                    let updatedCount = 0; let newCount = 0;
+                    officialTemplates.forEach(officialTpl => {
+                        if (!officialTpl.id || !officialTpl.name || !officialTpl.content) return; // Skip invalid
+                        const existingIndex = promptTemplates.findIndex(t => t.id === officialTpl.id);
+                        const templateData = { ...officialTpl, isCore: true, isOfficial: true }; // Mark as core and official
+
+                        if (existingIndex > -1) {
+                            promptTemplates[existingIndex] = { ...promptTemplates[existingIndex], ...templateData };
+                            updatedCount++;
+                        } else {
+                            promptTemplates.push(templateData);
+                            newCount++;
+                        }
+                    });
+                    GM_setValue(CUSTOM_PROMPT_TEMPLATES_KEY, promptTemplates);
+                    renderSettingsTemplateList(); populatePromptTemplateSelect(); updateFinalPrompt();
+                    updateStatus(`Official templates loaded: ${newCount} new, ${updatedCount} updated.`, false);
+                } catch (e) { console.error("[Shotgun Prompter] Error processing official templates:", e); updateStatus("Error processing official templates: " + e.message, true); }
+            },
+            onerror: function(response) { console.error("[Shotgun Prompter] Error fetching official templates:", response); updateStatus("Failed to fetch official templates (network error).", true); }
+        });
+    }
+
     function createSettingsModal() {
         if (document.getElementById('shotgun-settings-modal')) return;
         settingsModal = createElementWithProps('div', { id: 'shotgun-settings-modal', class: 'shotgun-modal shotgun-settings-submodal' });
@@ -761,7 +854,9 @@ Pay attention to the file paths provided in the context.`;
         const newTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'New Template' }); newTemplateBtn.addEventListener('click', clearTemplateEditFields); templateButtonsDiv.appendChild(newTemplateBtn);
         const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template' }); saveTemplateBtn.addEventListener('click', handleSaveTemplate); templateButtonsDiv.appendChild(saveTemplateBtn);
         const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '' }); deleteTemplateBtn.addEventListener('click', handleDeleteTemplate); templateButtonsDiv.appendChild(deleteTemplateBtn);
-        templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection);
+        const fetchOfficialBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub' });
+        fetchOfficialBtn.addEventListener('click', fetchOfficialPromptTemplates); templateButtonsDiv.appendChild(fetchOfficialBtn);
+        templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection); 
 
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
         const ieDiv = createElementWithProps('div', { class: 'shotgun-settings-import-export' }); // Changed from grid to simple div
@@ -819,11 +914,21 @@ Pay attention to the file paths provided in the context.`;
                     if (remoteVersion && remoteVersion > SCRIPT_VERSION) {
                         const updateUrl = remoteVersionData.update_url || GM_info.script.downloadURL || '#';
                         const changelogUrl = remoteVersionData.changelog_url || '';
-                        let message = `New version ${remoteVersion} available! <a href="${updateUrl}" target="_blank" style="color: white; text-decoration: underline;">Update now</a>.`;
+
+                        const fragment = document.createDocumentFragment();
+                        fragment.appendChild(document.createTextNode(`New version ${remoteVersion} available! `));
+                        
+                        const updateBtn = createElementWithProps('button', { class: 'shotgun-button shotgun-button-small', textContent: `Update to v${remoteVersion}`});
+                        updateBtn.style.marginLeft = "5px"; updateBtn.style.marginRight = "5px";
+                        updateBtn.onclick = () => window.open(updateUrl, '_blank');
+                        fragment.appendChild(updateBtn);
+
                         if (changelogUrl) {
-                            message += ` <a href="${changelogUrl}" target="_blank" style="color: white; text-decoration: underline;">View Changelog</a>.`;
+                            const changelogLink = createElementWithProps('a', { href: changelogUrl, target: '_blank', textContent: 'View Changelog' });
+                            changelogLink.style.color = '#1a73e8'; // Match button color for consistency
+                            fragment.appendChild(changelogLink);
                         }
-                        updateStatus(message, false, true);
+                        updateStatus(fragment, false, true);
                     } else {
                         // updateStatus("Script is up to date.", false, true); // Optional: notify user they are up to date
                         if (versionStatusDiv) versionStatusDiv.textContent = ''; // Clear if up-to-date
@@ -910,10 +1015,11 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-button:disabled { background-color: #f1f3f4; color: #9aa0a6; cursor: not-allowed; }
             .shotgun-button-danger { background-color: #d93025; } .shotgun-button-danger:hover { background-color: #c5221f; }
             .shotgun-modal-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e8eaed; padding: 10px 20px; margin-top: 0; flex-shrink: 0; }
-            .shotgun-status { font-size: 0.85em; color: #5f6368; text-align: right; flex-grow: 1; }
-            .shotgun-version-status { font-size: 0.8em; color: #5f6368; text-align: left; }
+            .shotgun-status { font-size: 0.85em; color: #5f6368; text-align: center; flex-grow: 1; margin: 0 10px; }
+            .shotgun-version-status { font-size: 0.8em; color: #5f6368; text-align: left; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
             .shotgun-version-status a { color: #1a73e8; text-decoration: underline; }
             .shotgun-stats-text { font-size: 0.8em; color: #5f6368; margin-bottom: 4px; flex-shrink: 0; }
+            .shotgun-current-script-version { font-size: 0.8em; color: #5f6368; flex-shrink: 0; }
             .shotgun-modal.minimized .shotgun-modal-content { position: fixed !important; bottom: 10px !important; left: 10px !important; width: 300px !important; height: 50px !important; padding: 0; overflow: hidden !important; resize: none !important; transform: none !important; }
             .shotgun-modal.minimized .shotgun-modal-body, .shotgun-modal.minimized .shotgun-modal-footer { display: none; }
             .shotgun-modal.minimized .shotgun-modal-header { padding: 10px 15px; margin-bottom: 0; border-bottom: none; cursor: pointer; }
@@ -935,7 +1041,7 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-settings-template-edit { flex: 2; display: flex; flex-direction: column; }
             .shotgun-settings-template-edit label { font-size: 0.85em; color: #5f6368; margin-bottom: 3px; }
             .shotgun-settings-template-edit .shotgun-input, .shotgun-settings-template-edit .shotgun-textarea { margin-bottom: 10px; }
-            .shotgun-settings-template-buttons { margin-top: auto; }
+            .shotgun-settings-template-buttons { margin-top: auto; display: flex; flex-wrap: wrap; gap: 5px; }
         `);
     }
 
