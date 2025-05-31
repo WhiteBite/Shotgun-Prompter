@@ -5,13 +5,19 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2025-05-31
+### Fixed
+- Added more detailed logging within `createElementWithProps` for `onclick` assignments to diagnose button non-interactivity.
+
+### Changed
+- Incremented script version to `0.5.5`.
+
 ## [0.5.4] - 2025-05-31
 ### Fixed
 - Addressed `TrustedHTML` error when displaying update notifications by modifying `updateStatus` to avoid direct `innerHTML` assignment for node messages.
 
 ### Changed
 - Incremented script version to `0.5.4`.
-
 ## [0.5.3] - 2025-05-31
 ### Fixed
 - Made `checkForUpdates` more aggressive by default when opening the modal (forceCheck=true) to aid update testing.

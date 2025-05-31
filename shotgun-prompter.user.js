@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.5.4
-// @description  Formulate prompts for AI Studio. Fix TrustedHTML issue for update notifications.
+// @version      0.5.5
+// @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.4'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.5'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -118,12 +118,19 @@ Pay attention to the file paths provided in the context.`;
         const el = document.createElement(tag);
         for (const key in props) {
             if (key === 'textContent') el.textContent = props[key];
-            else if (key.startsWith('on') && typeof props[key] === 'function') el[key] = props[key];
+            else if (key.startsWith('on') && typeof props[key] === 'function') {
+                el[key] = props[key];
+                // Enhanced logging for event handlers, especially onclick
+                if (key === 'onclick') {
+                    console.log(`[Shotgun Prompter] createElementWithProps: Assigned ${typeof props[key]} to ${key} for element:`, el.tagName, el.id || el.className, el.textContent);
+                }
+            } else if (key.startsWith('on') && typeof props[key] !== 'function') {
+                 console.warn(`[Shotgun Prompter] createElementWithProps: Attempted to assign non-function to event ${key} for element:`, el.tagName, el.id || el.className, el.textContent, 'Value:', props[key]);
+            }
             else if (props[key] !== undefined) {
                 if (['webkitdirectory', 'directory', 'multiple', 'disabled', 'readonly', 'checked', 'selected', 'indeterminate'].includes(key)) {
                      if (props[key] === '' || props[key] === true) el.setAttribute(key, '');
                      if (key === 'checked' && props[key]) el.checked = true;
-                     if (key === 'selected' && props[key]) el.selected = true;
                      if (key === 'indeterminate' && props[key]) el.indeterminate = true;
                 } else el.setAttribute(key, props[key]);
             }
