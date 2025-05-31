@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.6.3
+// @version      0.6.4
 // @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.3'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.4'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -1190,7 +1190,7 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-modal.minimized .shotgun-modal-header h2 { font-size: 1.1em; }
             .shotgun-settings-submodal { z-index: 10001; background-color: transparent; pointer-events: none; }
             .shotgun-settings-submodal .shotgun-modal-content { pointer-events: auto; resize: none !important; } /* Disabled resize for settings modal content */
-            .shotgun-settings-submodal .shotgun-modal-body { flex-direction: column; overflow-y: auto; }
+            .shotgun-settings-submodal .shotgun-modal-body { flex-direction: column; overflow-y: auto; padding-bottom: 10px; /* Ensure space for last element */ }
             .shotgun-settings-ignore-tester { display: flex; align-items: center; margin-bottom: 10px; gap: 5px; }
             .shotgun-settings-ignore-tester input { flex-grow: 1; }
             .shotgun-settings-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; margin-bottom: 15px; }
@@ -1206,6 +1206,25 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-settings-template-edit label { font-size: 0.85em; color: #5f6368; margin-bottom: 3px; }
             .shotgun-settings-template-edit .shotgun-input, .shotgun-settings-template-edit .shotgun-textarea { margin-bottom: 10px; }
             .shotgun-settings-template-buttons { margin-top: auto; display: flex; flex-wrap: wrap; gap: 5px; }
+
+            /* Styles for Ignore Rules on Main Panel */
+            #shotgun-left-panel-el .shotgun-settings-ignore-tester {
+                margin-top: 8px; /* Space above the tester */
+                gap: 8px; /* Space between elements in tester */
+            }
+            #shotgun-left-panel-el .shotgun-settings-ignore-tester label {
+                flex-shrink: 0;
+                font-size: 0.9em;
+                color: #5f6368;
+            }
+            #shotgun-left-panel-el .shotgun-settings-ignore-tester input.shotgun-input {
+                min-width: 100px; /* Prevent input from becoming too small */
+                margin-bottom: 0; /* Override default from .shotgun-input */
+            }
+            #shotgun-left-panel-el .shotgun-settings-ignore-tester span#shotgun-ignore-tester-result {
+                flex-shrink: 0;
+                margin-left: 0; /* Gap is now handling spacing */
+            }
         `);
     }
 
