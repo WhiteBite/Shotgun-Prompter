@@ -121,12 +121,12 @@ Pay attention to the file paths provided in the context.`;
             if (key === 'textContent') el.textContent = props[key];
             else if (key.startsWith('on') && typeof props[key] === 'function') {
                 el[key] = props[key];
-            } 
+            }
             else if (props[key] !== undefined) {
                 if (['webkitdirectory', 'directory', 'multiple', 'disabled', 'readonly', 'checked', 'selected', 'indeterminate'].includes(key)) {
-                     if (props[key] === '' || props[key] === true) el.setAttribute(key, '');
-                     if (key === 'checked' && props[key]) el.checked = true;
-                     if (key === 'indeterminate' && props[key]) el.indeterminate = true;
+                    if (props[key] === '' || props[key] === true) el.setAttribute(key, '');
+                    if (key === 'checked' && props[key]) el.checked = true;
+                    if (key === 'indeterminate' && props[key]) el.indeterminate = true;
                 } else el.setAttribute(key, props[key]);
             }
         }
@@ -301,11 +301,9 @@ Pay attention to the file paths provided in the context.`;
         displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles);
         renderFileList();
 
-        if (selectAllFilesBtn) selectAllFilesBtn.style.display = useRules ? 'none' : 'inline-block';
-        if (deselectAllFilesBtn) deselectAllFilesBtn.style.display = useRules ? 'none' : 'inline-block';
-
-
         const anyFilesToProcess = projectFiles.some(pf => !pf.excluded && (!useRules || !pf.isRuleExcluded));
+        if (selectAllFilesBtn) selectAllFilesBtn.disabled = projectFiles.length === 0;
+        if (deselectAllFilesBtn) deselectAllFilesBtn.disabled = projectFiles.length === 0;
         if (generateContextBtn) generateContextBtn.disabled = !(projectFiles.length > 0 && anyFilesToProcess);
         updateStats();
     }
@@ -330,7 +328,7 @@ Pay attention to the file paths provided in the context.`;
         projectFiles.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
         let commonPrefixForGitignore = "";
-         if (projectFiles.length > 0 && projectFiles[0].relPath.includes('/')) {
+        if (projectFiles.length > 0 && projectFiles[0].relPath.includes('/')) {
             commonPrefixForGitignore = projectFiles[0].relPath.substring(0, projectFiles[0].relPath.indexOf('/') + 1);
             if (!projectFiles.every(pf => pf.relPath.startsWith(commonPrefixForGitignore) || !pf.relPath.includes('/'))) {
                 commonPrefixForGitignore = "";
@@ -357,7 +355,7 @@ Pay attention to the file paths provided in the context.`;
                     filesInThisDir.push({ file, relPath, excluded: false, isRuleExcluded: false, content: null, id: SCRIPT_PREFIX + 'pf_api_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) });
                 } catch (e) {
                     console.error(`[Shotgun Prompter] Error getting file from handle ${relPath}:`, e);
-                     if (fileReadErrorsDiv) {
+                    if (fileReadErrorsDiv) {
                         const errorP = createElementWithProps('p', { textContent: `Error accessing file ${relPath}: ${e.message}` });
                         fileReadErrorsDiv.appendChild(errorP);
                         fileReadErrorsDiv.style.display = 'block';
@@ -404,24 +402,24 @@ Pay attention to the file paths provided in the context.`;
                 if (e.name !== 'NotFoundError') updateStatus("Could not load .gitignore via API.", true);
             }
         } else {
-             GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
+            GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
         }
 
         applyIgnoreRulesToProjectFiles();
-        persistCurrentExpansionState(displayTreeRoot); 
+        persistCurrentExpansionState(displayTreeRoot);
 
         displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); renderFileList(); updateStats();
         if(generateContextBtn) {
             const anyFilesToInclude = projectFiles.some(pf => !pf.excluded && (!useRules || !pf.isRuleExcluded));
             generateContextBtn.disabled = !(projectFiles.length > 0 && anyFilesToInclude);
         }
-        if(selectAllFilesBtn) selectAllFilesBtn.style.display = useRules ? 'none' : 'inline-block';
-        if(deselectAllFilesBtn) deselectAllFilesBtn.style.display = useRules ? 'none' : 'inline-block';
+        if(selectAllFilesBtn) selectAllFilesBtn.disabled = projectFiles.length === 0;
+        if(deselectAllFilesBtn) deselectAllFilesBtn.disabled = projectFiles.length === 0;
         if(contextTextarea) contextTextarea.value = ''; generatedContext = ''; if(copyContextBtn) copyContextBtn.disabled = true;
         if(finalPromptTextarea) finalPromptTextarea.value = ''; if(copyPromptBtn) copyPromptBtn.disabled = true;
         updateStatus(`Folder processed via API. ${projectFiles.length} files/folders found.`, false);
         if(refreshApiFolderBtn) refreshApiFolderBtn.style.display = 'inline-block';
-        persistCurrentExpansionState(displayTreeRoot); 
+        persistCurrentExpansionState(displayTreeRoot);
     }
 
     async function handleApiFolderSelect() {
@@ -435,7 +433,7 @@ Pay attention to the file paths provided in the context.`;
             currentDirectoryHandle = dirHandle;
             apiFolderSelected = true;
             await processDirectoryHandle(dirHandle);
-            persistCurrentExpansionState(displayTreeRoot); 
+            persistCurrentExpansionState(displayTreeRoot);
         } catch (err) {
             if (err.name === 'AbortError') {
                 updateStatus("Folder selection aborted by user.", false);
@@ -507,15 +505,15 @@ Pay attention to the file paths provided in the context.`;
                         expandedState = persistedExpansionStates[nodePathForExpansion];
                     }
                     currentLevel[part] = { _name: part, _isDir: isDirNode, _pf: isDirNode ? null : pf, _children: {}, _id: nodeId,
-                                           _excluded: pf.excluded,
-                                           _isRuleExcluded: pf.isRuleExcluded,
-                                           _expanded: isDirNode ? expandedState : undefined };
+                        _excluded: pf.excluded,
+                        _isRuleExcluded: pf.isRuleExcluded,
+                        _expanded: isDirNode ? expandedState : undefined
+                    };
                 }
                 if (!isDirNode) {
                     currentLevel[part]._pf = pf;
                     currentLevel[part]._excluded = pf.excluded;
                     currentLevel[part]._isRuleExcluded = pf.isRuleExcluded;
-                    currentLevel[part]._isDir = false;
                 }
                 currentLevel = currentLevel[part]._children;
             });
@@ -523,60 +521,57 @@ Pay attention to the file paths provided in the context.`;
 
         if (!rulesActive) {
             function setExclusionForCheckboxState(node) {
-                if (!node._isDir) return node._excluded;
-                if (Object.keys(node._children).length === 0) return node._excluded; 
+                if (!node._isDir) {
+                    return node._excluded;
+                }
+                if (Object.keys(node._children).length === 0) { // Empty directory
+                    return node._excluded; // Keep its current state (e.g. if set by user)
+                }
+
                 let allChildrenExcluded = true;
-                let noChildrenManuallyExcluded = true;
                 for (const childKey in node._children) {
-                    if (!setExclusionForCheckboxState(node._children[childKey])) allChildrenExcluded = false;
-                    else noChildrenManuallyExcluded = false;
+                    if (!setExclusionForCheckboxState(node._children[childKey])) {
+                        allChildrenExcluded = false;
+                        break;
+                    }
                 }
                 node._excluded = allChildrenExcluded;
                 return node._excluded;
             }
-            Object.values(newTree).forEach(rootNode => setExclusionForCheckboxState(rootNode));
+            // This logic should run regardless of rulesActive to set initial folder states,
+            // but it should be careful not to override pf.excluded for files.
+            // The getEffectiveChildrenState used in rendering is better for visual state.
+            // For data state, setChildrenChecked handles propagation.
+            // Initial folder _excluded state should be false, then derived if needed.
         }
-
         return newTree;
     }
 
     function setChildrenChecked(item, checked, isRecursiveCall = false) {
-        // Update the _excluded status of the current item (node in displayTreeRoot)
         item._excluded = !checked;
-
-        // If it's a file node, update the corresponding entry in projectFiles array
-        // and also the _pf object within the tree node itself for consistency.
         if (item._pf && item._pf.id) {
             const projectFileEntry = projectFiles.find(pf => pf.id === item._pf.id);
             if (projectFileEntry) {
                 projectFileEntry.excluded = !checked;
             }
-            item._pf.excluded = !checked;
+            if (item._pf) { // Ensure _pf exists
+                item._pf.excluded = !checked;
+            }
         }
 
-        // Recursively apply the checked state to all children
         if (item._isDir && item._children) {
             Object.values(item._children).forEach(child => {
                 setChildrenChecked(child, checked, true);
             });
         }
-
-        // If this is the initial call (not a recursive one)
         if (!isRecursiveCall) {
-            // Re-render the file list to reflect the new checkbox states
             renderFileList();
-
-            // Update statistics (like file counts, char counts)
             updateStats();
-
-            // Update the enabled/disabled state of the "Generate Context" button
             const useRules = GM_getValue(USE_GITIGNORE_RULES_KEY, true);
             const anyFilesToProcess = projectFiles.some(pf => pf.file && !pf.excluded && (!useRules || !pf.isRuleExcluded));
             if (generateContextBtn) {
                 generateContextBtn.disabled = !(projectFiles.length > 0 && anyFilesToProcess);
             }
-            // Persist folder expansion states, as this interaction doesn't change them
-            // but it's good practice if other parts of renderFileList might rely on it.
             persistCurrentExpansionState(displayTreeRoot);
         }
     }
@@ -590,7 +585,7 @@ Pay attention to the file paths provided in the context.`;
             renderFileList();
         }
     }
-    
+
     function getEffectiveChildrenState(folderNode) {
         let hasIncluded = false;
         let hasExcluded = false;
@@ -600,13 +595,13 @@ Pay attention to the file paths provided in the context.`;
                 if (currentNode._excluded) hasExcluded = true; else hasIncluded = true;
                 return;
             }
-            if (Object.keys(currentNode._children).length === 0) { 
+            if (Object.keys(currentNode._children).length === 0) {
                 if (currentNode._excluded) hasExcluded = true; else hasIncluded = true;
                 return;
             }
             for (const childKey in currentNode._children) {
                 findStates(currentNode._children[childKey]);
-                if (hasIncluded && hasExcluded) return; 
+                if (hasIncluded && hasExcluded) return;
             }
         }
         findStates(folderNode);
@@ -623,23 +618,27 @@ Pay attention to the file paths provided in the context.`;
             const entryDiv = document.createElement('div'); entryDiv.className = 'shotgun-tree-entry';
             let checkbox;
 
-            checkbox = createElementWithProps('input', { type: 'checkbox', id: `shotgun-cb-${item._id}` });
+            checkbox = createElementWithProps('input', { type: 'checkbox', id: `shotgun-cb-${item._id}`, class: 'shotgun-tree-checkbox' });
 
             if (item._isDir) {
-
-                let allChildrenManuallyExcluded = true;
-                let noChildrenManuallyExcluded = true;
-
-                if (Object.keys(item._children).length > 0) {
-                    Object.values(item._children).forEach(childNode => {
-                        if (childNode._excluded) allChildrenManuallyExcluded = false;
-                        else noChildrenManuallyExcluded = false;
-                    });
-                    checkbox.checked = !allChildrenManuallyExcluded;
-                    checkbox.indeterminate = !allChildrenManuallyExcluded && !noChildrenManuallyExcluded;
-                } else {
+                const { hasIncluded, hasExcluded } = getEffectiveChildrenState(item);
+                if (Object.keys(item._children).length === 0) { // Empty folder
                     checkbox.checked = !item._excluded;
                     checkbox.indeterminate = false;
+                } else { // Folder with children
+                    if (hasIncluded && !hasExcluded) { // All descendants included
+                        checkbox.checked = true;
+                        checkbox.indeterminate = false;
+                    } else if (!hasIncluded && hasExcluded) { // All descendants excluded
+                        checkbox.checked = false;
+                        checkbox.indeterminate = false;
+                    } else if (hasIncluded && hasExcluded) { // Mixed
+                        checkbox.checked = true; // Convention for indeterminate
+                        checkbox.indeterminate = true;
+                    } else { // Fallback, should ideally not be reached if children exist and states are clear
+                        checkbox.checked = !item._excluded;
+                        checkbox.indeterminate = false;
+                    }
                 }
             } else {
                 checkbox.checked = !item._excluded;
@@ -797,7 +796,7 @@ Pay attention to the file paths provided in the context.`;
         }
     }
     function loadModalPositionAndSize(modalElement, sizeKey, positionKey, defaultW = '85%', defaultH = '90vh') {
-         if (modalElement && (!isModalMinimized || modalElement !== modal)) {
+        if (modalElement && (!isModalMinimized || modalElement !== modal)) {
             const modalContent = modalElement.querySelector('.shotgun-modal-content') || modalElement;
             if (positionKey) {
                 const pos = GM_getValue(positionKey);
@@ -952,6 +951,27 @@ Pay attention to the file paths provided in the context.`;
             renderFileList();
         }
 
+        function setAllNodesCheckedState(rootTreeObject, targetCheckedState) {
+            function recurseSet(node, isChecked) {
+                node._excluded = !isChecked;
+                if (node._pf && node._pf.id) {
+                    const projectFileEntry = projectFiles.find(pf => pf.id === node._pf.id);
+                    if (projectFileEntry) projectFileEntry.excluded = !isChecked;
+                    if (node._pf) node._pf.excluded = !isChecked;
+                }
+                if (node._isDir && node._children) {
+                    Object.values(node._children).forEach(child => recurseSet(child, isChecked));
+                }
+            }
+            if (rootTreeObject && typeof rootTreeObject === 'object') {
+                Object.values(rootTreeObject).forEach(rootNode => { if (rootNode) recurseSet(rootNode, targetCheckedState); });
+            }
+            renderFileList(); // This will use getEffectiveChildrenState to update visuals
+            updateStats();
+            const anyFilesToProcess = projectFiles.some(pf => pf.file && !pf.excluded && (!GM_getValue(USE_GITIGNORE_RULES_KEY, true) || !pf.isRuleExcluded));
+            if (generateContextBtn) generateContextBtn.disabled = !(projectFiles.length > 0 && anyFilesToProcess);
+        }
+
         const fileListControls = createElementWithProps('div', {class: 'shotgun-file-list-controls'});
         const expandAllBtn = createElementWithProps('button', {class: 'shotgun-button shotgun-button-small', textContent: 'Разв. все'});
         expandAllBtn.onclick = () => setAllNodesExpansion(true);
@@ -959,8 +979,9 @@ Pay attention to the file paths provided in the context.`;
         collapseAllBtn.onclick = () => setAllNodesExpansion(false);
         selectAllFilesBtn = createElementWithProps('button', {id: 'shotgun-select-all-btn', class: 'shotgun-button shotgun-button-small', textContent: 'Выбр. все'});
         selectAllFilesBtn.onclick = () => { projectFiles.forEach(pf => pf.excluded = false); displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); renderFileList(); if(generateContextBtn) generateContextBtn.disabled = projectFiles.length === 0; };
+        selectAllFilesBtn.onclick = () => setAllNodesCheckedState(displayTreeRoot, true);
         deselectAllFilesBtn = createElementWithProps('button', {id: 'shotgun-deselect-all-btn', class: 'shotgun-button shotgun-button-small', textContent: 'Снять все'});
-        deselectAllFilesBtn.onclick = () => { projectFiles.forEach(pf => pf.excluded = true); displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); renderFileList(); if(generateContextBtn) generateContextBtn.disabled = true; };
+        deselectAllFilesBtn.onclick = () => setAllNodesCheckedState(displayTreeRoot, false);
         fileListControls.append(expandAllBtn, collapseAllBtn, selectAllFilesBtn, deselectAllFilesBtn);
         fileListHeader.appendChild(fileListControls);
         leftPanelElement.appendChild(fileListHeader);
@@ -982,10 +1003,10 @@ Pay attention to the file paths provided in the context.`;
             GM_setValue(USE_GITIGNORE_RULES_KEY, isChecked);
             if(settingsIgnoreRulesTextarea) settingsIgnoreRulesTextarea.disabled = !isChecked;
             (apiFolderSelected && currentDirectoryHandle ? processDirectoryHandle(currentDirectoryHandle) : loadGitignoreAndApplyRules(projectFiles, lastSelectedFolderName ? lastSelectedFolderName + '/' : "")).then(() => {
-              displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); 
-              renderFileList();
-              if(selectAllFilesBtn) selectAllFilesBtn.style.display = isChecked ? 'none' : 'inline-block';
-              if(deselectAllFilesBtn) deselectAllFilesBtn.style.display = isChecked ? 'none' : 'inline-block';
+                displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles);
+                renderFileList();
+                if(selectAllFilesBtn) selectAllFilesBtn.disabled = projectFiles.length === 0;
+                if(deselectAllFilesBtn) deselectAllFilesBtn.disabled = projectFiles.length === 0;
             });
             updateStatus(`Ignore rules ${isChecked ? 'enabled' : 'disabled'}. File list updated.`);
         });
@@ -1038,9 +1059,9 @@ Pay attention to the file paths provided in the context.`;
         if (document.body) document.body.appendChild(modal); else { console.error("[Shotgun Prompter] document.body not available."); return; }
         assignUIElements(); loadElementHeights(); addResizeListeners(); renderFileList(); updateStats(); populatePromptTemplateSelect(); updateFinalPrompt();
         const rulesAreActive = GM_getValue(USE_GITIGNORE_RULES_KEY, true);
-        if(selectAllFilesBtn) selectAllFilesBtn.style.display = rulesAreActive ? 'none' : 'inline-block';
-        if(deselectAllFilesBtn) deselectAllFilesBtn.style.display = rulesAreActive ? 'none' : 'inline-block';
-        if(refreshApiFolderBtn && apiFolderSelected) refreshApiFolderBtn.style.display = 'inline-block'; else if(refreshApiFolderBtn) refreshApiFolderBtn.style.display = 'none';
+        if(selectAllFilesBtn) selectAllFilesBtn.disabled = projectFiles.length === 0;
+        if(deselectAllFilesBtn) deselectAllFilesBtn.disabled = projectFiles.length === 0;
+        if(refreshApiFolderBtn && apiFolderSelected) refreshApiFolderBtn.style.display = 'inline-block'; else if(refreshApiFolderBtn) refreshApiFolderBtn.style.display = 'none'; // Keep this as is
         if (fileInput) fileInput.addEventListener('change', handleLegacyFileSelection);
         if (generateContextBtn) generateContextBtn.addEventListener('click', generateContext);
         if (copyContextBtn) copyContextBtn.addEventListener('click', () => copyToClipboard(contextTextarea.value, copyContextBtn));
@@ -1223,35 +1244,35 @@ Pay attention to the file paths provided in the context.`;
                     });
 
                     Promise.all(fetchPromises)
-                        .then(fetchedTemplates => {
-                            let updatedCount = 0;
-                            let newCount = 0;
-                            fetchedTemplates.filter(t => t !== null).forEach(officialTpl => {
-                                const existingIndex = promptTemplates.findIndex(t => t.id === officialTpl.id);
-                                const templateData = {
-                                    id: officialTpl.id,
-                                    name: officialTpl.name,
-                                    content: officialTpl.content,
-                                    isCore: typeof officialTpl.isCore === 'boolean' ? officialTpl.isCore : false,
-                                    isOfficial: true
-                                };
+                    .then(fetchedTemplates => {
+                        let updatedCount = 0;
+                        let newCount = 0;
+                        fetchedTemplates.filter(t => t !== null).forEach(officialTpl => {
+                            const existingIndex = promptTemplates.findIndex(t => t.id === officialTpl.id);
+                            const templateData = {
+                                id: officialTpl.id,
+                                name: officialTpl.name,
+                                content: officialTpl.content,
+                                isCore: typeof officialTpl.isCore === 'boolean' ? officialTpl.isCore : false,
+                                isOfficial: true
+                            };
 
-                                if (existingIndex > -1) {
-                                    promptTemplates[existingIndex] = { ...promptTemplates[existingIndex], ...templateData };
-                                    updatedCount++;
-                                } else {
-                                    promptTemplates.push(templateData);
-                                    newCount++;
-                                }
-                            });
-                            GM_setValue(CUSTOM_PROMPT_TEMPLATES_KEY, promptTemplates);
-                            renderSettingsTemplateList(); populatePromptTemplateSelect(); updateFinalPrompt();
-                            updateStatus(`Official templates loaded: ${newCount} new, ${updatedCount} updated.`, false);
-                        })
-                        .catch(error => {
-                            console.error("[Shotgun Prompter] Error fetching one or more template files:", error);
-                            updateStatus("Error loading some official templates. See console.", true);
+                            if (existingIndex > -1) {
+                                promptTemplates[existingIndex] = { ...promptTemplates[existingIndex], ...templateData };
+                                updatedCount++;
+                            } else {
+                                promptTemplates.push(templateData);
+                                newCount++;
+                            }
                         });
+                        GM_setValue(CUSTOM_PROMPT_TEMPLATES_KEY, promptTemplates);
+                        renderSettingsTemplateList(); populatePromptTemplateSelect(); updateFinalPrompt();
+                        updateStatus(`Official templates loaded: ${newCount} new, ${updatedCount} updated.`, false);
+                    })
+                    .catch(error => {
+                        console.error("[Shotgun Prompter] Error fetching one or more template files:", error);
+                        updateStatus("Error loading some official templates. See console.", true);
+                    });
                 } catch (e) { console.error("[Shotgun Prompter] Error processing official templates manifest:", e, "Response Text:", response.responseText); updateStatus("Error processing official templates manifest: " + e.message, true); }
             },
             onerror: function(response) {
@@ -1486,8 +1507,8 @@ Pay attention to the file paths provided in the context.`;
                 const mainIgnoreRulesTA = document.getElementById('shotgun-main-ignore-rules-ta');
                 if (mainIgnoreRulesTA) mainIgnoreRulesTA.value = GM_getValue(CUSTOM_IGNORE_RULES_KEY, DEFAULT_IGNORE_RULES);
                 const rulesNowActive = GM_getValue(USE_GITIGNORE_RULES_KEY, true);
-                if(selectAllFilesBtn) selectAllFilesBtn.style.display = rulesNowActive ? 'none' : 'inline-block';
-                if(deselectAllFilesBtn) deselectAllFilesBtn.style.display = rulesNowActive ? 'none' : 'inline-block';
+                if(selectAllFilesBtn) selectAllFilesBtn.disabled = projectFiles.length === 0;
+                if(deselectAllFilesBtn) deselectAllFilesBtn.disabled = projectFiles.length === 0;
                 if (useGitignoreCheckbox) useGitignoreCheckbox.checked = GM_getValue(USE_GITIGNORE_RULES_KEY, true);
                 if (refreshApiFolderBtn && apiFolderSelected) refreshApiFolderBtn.style.display = 'inline-block'; else if(refreshApiFolderBtn) refreshApiFolderBtn.style.display = 'none';
                 if (settingsIgnoreRulesTextarea && useGitignoreCheckbox) settingsIgnoreRulesTextarea.disabled = !useGitignoreCheckbox.checked;
@@ -1539,7 +1560,7 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-tree-li > .shotgun-tree-entry::before { content: ""; position: absolute; left: -10px; top: 0.7em; width: 10px; border-top: 1px solid #ccc; }
             .shotgun-tree-li:last-child > .shotgun-tree-ul::before { bottom: auto; height: 1.5em; }
             .shotgun-tree-entry { display: flex; align-items: center; padding: 2px 0; position: relative; }
-            .shotgun-tree-icon { margin-right: 4px; display: inline-flex; align-items: center; width: auto; }
+            .shotgun-tree-icon { margin-right: 4px; display: inline-flex; align-items: center; width: auto; user-select: none; }
             .shotgun-tree-expander { cursor: pointer; margin-right: 2px; display: inline-block; width: 1em; text-align: center; }
             .shotgun-tree-entry input[type="checkbox"] { margin-right: 5px; vertical-align: middle; }
             .shotgun-tree-entry label { vertical-align: middle; cursor: pointer; white-space: nowrap; }
@@ -1613,7 +1634,7 @@ Pay attention to the file paths provided in the context.`;
     function runInitialization() {
         if (scriptInitialized) return;
         if (document.body && typeof GM_addStyle === 'function' && typeof GM_xmlhttpRequest === 'function' && typeof GM_info === 'object') {
-             init();
+            init();
         } else {
             const onPageLoad = () => {
                 if (scriptInitialized) return;
