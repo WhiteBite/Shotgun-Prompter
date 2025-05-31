@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.5.3
-// @description  Formulate prompts for AI Studio using local project files. Aggressive update check for testing.
+// @version      0.5.4
+// @description  Formulate prompts for AI Studio. Fix TrustedHTML issue for update notifications.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.3'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.4'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
