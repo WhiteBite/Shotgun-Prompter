@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.5.2
-// @description  Formulate prompts for AI Studio using local project files. Debugging button clicks and version check.
+// @version      0.5.3
+// @description  Formulate prompts for AI Studio using local project files. Aggressive update check for testing.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
@@ -19,8 +19,9 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.3'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
+    console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
     const SCRIPT_PREFIX = 'shotgun_prompter_';
     const OFFICIAL_PROMPT_TEMPLATES_URL = GITHUB_RAW_CONTENT_URL + "prompt_templates.json";
@@ -959,9 +960,6 @@ Pay attention to the file paths provided in the context.`;
         const lastCheck = GM_getValue(LAST_VERSION_CHECK_KEY, 0);
         const timeSinceLastCheck = Date.now() - lastCheck;
         console.log(`[Shotgun Prompter] checkForUpdates: SCRIPT_VERSION=${SCRIPT_VERSION}. Last check: ${new Date(lastCheck).toLocaleString()}. Time since: ${timeSinceLastCheck/1000}s. Interval: ${CHECK_VERSION_INTERVAL/1000}s. Force check: ${forceCheck}`);
-
-        // TEMPORARY: For testing, always proceed with the check. Comment out the interval condition.
-        /*
         if (!forceCheck && timeSinceLastCheck < CHECK_VERSION_INTERVAL) {
             console.log("[Shotgun Prompter] Version check interval not yet passed and not forced.");
             const storedRemoteData = GM_getValue(LATEST_REMOTE_VERSION_DATA_KEY, null);
@@ -971,7 +969,6 @@ Pay attention to the file paths provided in the context.`;
             }
             return;
         }
-        */
         console.log("[Shotgun Prompter] Proceeding with version check API call.");
         GM_xmlhttpRequest({
             method: "GET",
@@ -1015,7 +1012,7 @@ Pay attention to the file paths provided in the context.`;
                 modal.style.display = 'block';
                 if (isModalMinimized) toggleMinimizeModal(); else loadModalPositionAndSize(modal, MODAL_SIZE_KEY, MODAL_POSITION_KEY);
                 if (folderInputLabel) folderInputLabel.textContent = lastSelectedFolderName ? `Последняя папка: ${lastSelectedFolderName}` : 'Папка не выбрана';
-                updateStatus('Modal opened. Checking for updates...');
+                updateStatus('Modal opened.');
                 checkForUpdates(true); // Force check when modal is opened by user for this debug session
             } else { console.error("[Shotgun Prompter] Modal is null or not in DOM."); updateStatus("Error: Could not display modal.", true); }
         });
