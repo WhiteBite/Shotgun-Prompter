@@ -5,9 +5,14 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.1] - 2025-05-31
+## [0.9.0] - 2025-05-31
+### Added
+- Experimental support for File System Access API:
+  - New "Select Folder (API)" button to use `window.showDirectoryPicker()`.
+  - Recursive reading of directory contents via the API.
+  - Automatic loading of `.gitignore` from the root of the directory selected via API.
+  - "Refresh List (API)" button to re-scan the directory if changes were made externally.
 ### Changed
-### Fixed
 - Corrected a `ReferenceError` in `renderTreeRecursiveDOM` that occurred when "Apply Ignore Rules" was active, due to attempting to access `checkbox.id` when the checkbox was not created.
 - Improved `.gitignore` pattern matching in `isPathIgnored` for patterns ending with `/` and patterns without slashes (e.g., `.git` vs `.git/`).
 - Implemented loading of rules from a `.gitignore` file found in the root of the selected folder. These rules are combined with manually entered rules.
@@ -116,3 +121,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.5] - 2025-05-31
 ### Fixed
 - Added more detailed logging within `createElementWithProps`
+
+## [0.9.3] - 2025-05-31
+### Fixed
+- Resolved a "TrustedHTML" error when clearing the file read error display by changing how child nodes are removed. This was an issue when using the File System Access API on sites with strict CSP.
+- Corrected logic for enabling/disabling the "Generate Context" button and visibility of "Select All"/"Deselect All" buttons when using File System Access API and ignore rules.
+### Changed
+- Incremented script version to `0.9.3`.
+
+## [0.9.4] - 2025-05-31
+### Fixed
+- Restored functionality for the standard folder selection method.
+- Ensured that file selection checkboxes are correctly displayed or hidden in the tree view based on whether "Apply Ignore Rules" is active.
+### Changed
+- Incremented script version to `0.9.4`.
+
+## [0.9.5] - 2025-05-31
+### Fixed
+- Corrected an issue where standard folder selection ("Выбор папки (стандарт)") would not populate the file tree. This was due to an incorrect event handler assignment.
+- Resolved a bug in the file tree rendering that prevented file/folder selection checkboxes from appearing or functioning correctly when "Apply Ignore Rules" was disabled. This was caused by a variable scoping issue.
+- Unified script versioning by ensuring the internal `SCRIPT_VERSION` constant primarily relies on `GM_info.script.version` (derived from the `@version` metadata tag) and uses the same version string as a fallback, eliminating discrepancies.
+### Changed
+- Incremented script version to `0.9.5`.
