@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.6.2
+// @version      0.6.3
 // @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.2'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.3'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -414,6 +414,16 @@ Pay attention to the file paths provided in the context.`;
         if(copyPromptBtn) copyPromptBtn.disabled = !populatedPrompt.trim();
         updateStats();
     }
+
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            const context = this;
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(context, args), delay);
+        };
+    }
+
     function toggleMinimizeModal() {
         if (!modal) return; isModalMinimized = !isModalMinimized; modal.classList.toggle('minimized', isModalMinimized);
         if (minimizeBtn) minimizeBtn.textContent = isModalMinimized ? '⤣' : '—';
@@ -590,6 +600,24 @@ Pay attention to the file paths provided in the context.`;
         leftPanelElement.appendChild(fileListHeader);
         statsDiv = createElementWithProps('div', { id: 'shotgun-stats-el', class: 'shotgun-stats-text' }); leftPanelElement.appendChild(statsDiv);
         fileListDiv = createElementWithProps('div', { id: 'shotgun-file-list-el', class: 'shotgun-file-list' }); leftPanelElement.appendChild(fileListDiv);
+
+        leftPanelElement.appendChild(createElementWithProps('h3', { textContent: 'Ignore Rules (.gitignore syntax)' , style: 'margin-top: 15px;'}));
+        settingsIgnoreRulesTextarea = createElementWithProps('textarea', { id: 'shotgun-main-ignore-rules-ta', class: 'shotgun-textarea', style: `height: ${GM_getValue(TA_IGNORE_RULES_HEIGHT_KEY, '80px')}; resize: vertical; min-height: 50px;`, placeholder: DEFAULT_IGNORE_RULES });
+        settingsIgnoreRulesTextarea.addEventListener('mouseup', () => saveElementHeight(settingsIgnoreRulesTextarea, TA_IGNORE_RULES_HEIGHT_KEY));
+        const debouncedSaveAndApplyIgnoreRules = debounce(() => {
+            GM_setValue(CUSTOM_IGNORE_RULES_KEY, settingsIgnoreRulesTextarea.value);
+            testIgnoreRule(); // Update tester result
+            if (projectFiles.length > 0) {
+                applyIgnoreRulesToProjectFiles();
+                displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles);
+                renderFileList();
+            }
+            updateStatus("Ignore rules updated and saved.", false);
+        }, 750);
+        settingsIgnoreRulesTextarea.addEventListener('input', debouncedSaveAndApplyIgnoreRules);
+        leftPanelElement.appendChild(settingsIgnoreRulesTextarea);
+        leftPanelElement.appendChild(createIgnoreTesterDOM()); // Create and append the tester
+
         generateContextBtn = createElementWithProps('button', { id: 'shotgun-generate-context-btn-el', class: 'shotgun-button', textContent: 'Generate Context', disabled: '' }); leftPanelElement.appendChild(generateContextBtn);
         copyContextBtn = createElementWithProps('button', { id: 'shotgun-copy-context-btn-el', class: 'shotgun-button', textContent: 'Copy Context', disabled: '' }); leftPanelElement.appendChild(copyContextBtn);
         leftPanelElement.appendChild(createElementWithProps('h4', { textContent: 'Generated Context:' }));
@@ -635,7 +663,10 @@ Pay attention to the file paths provided in the context.`;
 
     let settingsIgnoreRulesTextarea, settingsTemplateListDiv, settingsTemplateNameInput, settingsTemplateContentTextarea, settingsSelectedTemplateId = null;
     function loadSettings() {
-        if (settingsIgnoreRulesTextarea) settingsIgnoreRulesTextarea.value = GM_getValue(CUSTOM_IGNORE_RULES_KEY, DEFAULT_IGNORE_RULES);
+        // Ignore rules textarea is now on the main modal, loaded when assignUIElements and createModal run.
+        // However, we ensure it's populated here if the settings modal is opened,
+        // or more accurately, when the main modal is created.
+        if (document.getElementById('shotgun-main-ignore-rules-ta')) document.getElementById('shotgun-main-ignore-rules-ta').value = GM_getValue(CUSTOM_IGNORE_RULES_KEY, DEFAULT_IGNORE_RULES);
         renderSettingsTemplateList();
         if (promptTemplates.length > 0) { const templateToSelect = promptTemplates.find(t => t.id === selectedPromptTemplateId) || promptTemplates[0]; selectTemplateForEditing(templateToSelect.id); }
         else clearTemplateEditFields();
@@ -649,7 +680,7 @@ Pay attention to the file paths provided in the context.`;
         if(settingsIgnoreTesterResultSpan) settingsIgnoreTesterResultSpan.textContent = '';
     }
     function saveSettings() {
-        if (settingsIgnoreRulesTextarea) { GM_setValue(CUSTOM_IGNORE_RULES_KEY, settingsIgnoreRulesTextarea.value); if (projectFiles.length > 0) { applyIgnoreRulesToProjectFiles(); displayTreeRoot = buildDisplayTreeAndSetExclusion(projectFiles); renderFileList(); if(contextTextarea) contextTextarea.value = ''; generatedContext = ''; if(copyContextBtn) copyContextBtn.disabled = true; updateFinalPrompt(); updateStats(); } }
+        // Ignore rules are saved via debounce on the main modal's textarea
         saveModalPositionAndSize(settingsModal, SETTINGS_MODAL_SIZE_KEY, null);
         if(settingsMaxFileSizeInput) GM_setValue(MAX_FILE_SIZE_KB_KEY, settingsMaxFileSizeInput.value);
         if(settingsFileSizeActionSelect) GM_setValue(FILE_SIZE_ACTION_KEY, settingsFileSizeActionSelect.value);
@@ -727,9 +758,10 @@ Pay attention to the file paths provided in the context.`;
         }
     }
     function testIgnoreRule() {
-        if (!settingsIgnoreTesterPathInput || !settingsIgnoreTesterResultSpan || !settingsIgnoreRulesTextarea) return;
+        const ignoreRulesTA = document.getElementById('shotgun-main-ignore-rules-ta'); // Ensure we get the one on main modal
+        if (!settingsIgnoreTesterPathInput || !settingsIgnoreTesterResultSpan || !ignoreRulesTA) return;
         const path = settingsIgnoreTesterPathInput.value.trim();
-        const rules = settingsIgnoreRulesTextarea.value;
+        const rules = ignoreRulesTA.value;
         if (!path) { settingsIgnoreTesterResultSpan.textContent = "Enter a path to test."; settingsIgnoreTesterResultSpan.style.color = 'orange'; return; }
         const ignored = isPathIgnored(path, rules);
         settingsIgnoreTesterResultSpan.textContent = ignored ? "Ignored" : "Included";
@@ -851,14 +883,7 @@ Pay attention to the file paths provided in the context.`;
         });
     }
 
-    function createSettingsIgnoreRulesSection() {
-        const sectionDiv = createElementWithProps('div');
-        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'Ignore Rules' }));
-        settingsIgnoreRulesTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-ignore-rules-ta', class: 'shotgun-textarea', style: `height: ${GM_getValue(TA_IGNORE_RULES_HEIGHT_KEY, '100px')}; resize: vertical;`, placeholder: DEFAULT_IGNORE_RULES });
-        settingsIgnoreRulesTextarea.addEventListener('mouseup', () => saveElementHeight(settingsIgnoreRulesTextarea, TA_IGNORE_RULES_HEIGHT_KEY));
-        settingsIgnoreRulesTextarea.addEventListener('input', testIgnoreRule);
-        sectionDiv.appendChild(settingsIgnoreRulesTextarea);
-
+    function createIgnoreTesterDOM() { // Helper to create tester div, used in main modal
         const testerDiv = createElementWithProps('div', {class: 'shotgun-settings-ignore-tester'});
         testerDiv.appendChild(createElementWithProps('label', {textContent: 'Test Path:', for: 'shotgun-ignore-tester-path'}));
         settingsIgnoreTesterPathInput = createElementWithProps('input', {type: 'text', id: 'shotgun-ignore-tester-path', class: 'shotgun-input', placeholder: 'e.g., node_modules/file.js or src/my_file.txt'});
@@ -866,7 +891,11 @@ Pay attention to the file paths provided in the context.`;
         testerDiv.appendChild(settingsIgnoreTesterPathInput);
         settingsIgnoreTesterResultSpan = createElementWithProps('span', {id: 'shotgun-ignore-tester-result', style: 'margin-left: 10px; font-weight: bold;'});
         testerDiv.appendChild(settingsIgnoreTesterResultSpan);
-        sectionDiv.appendChild(testerDiv);
+        return testerDiv;
+    }
+
+    function createSettingsIgnoreRulesSection() {
+        const sectionDiv = createElementWithProps('div'); // This function is now effectively empty or can be removed
         return sectionDiv;
     }
 
@@ -974,9 +1003,7 @@ Pay attention to the file paths provided in the context.`;
         closeBtn.addEventListener('click', () => { saveSettings(); if(settingsModal) settingsModal.style.display = 'none'; });
         modalHeader.appendChild(closeBtn);
 
-        const modalBody = createElementWithProps('div', { class: 'shotgun-modal-body', style: 'flex-direction: column;' });
-        
-        modalBody.appendChild(createSettingsIgnoreRulesSection());
+        const modalBody = createElementWithProps('div', { class: 'shotgun-modal-body', style: 'flex-direction: column;' });        
         modalBody.appendChild(createSettingsFileHandlingSection());
         modalBody.appendChild(createSettingsPromptTemplatesSection());
         modalBody.appendChild(createSettingsImportExportSection());
@@ -1090,6 +1117,10 @@ Pay attention to the file paths provided in the context.`;
                 modal.style.display = 'block';
                 if (isModalMinimized) toggleMinimizeModal(); else loadModalPositionAndSize(modal, MODAL_SIZE_KEY, MODAL_POSITION_KEY);
                 if (folderInputLabel) folderInputLabel.textContent = lastSelectedFolderName ? `Последняя папка: ${lastSelectedFolderName}` : 'Папка не выбрана';
+                // Ensure ignore rules textarea on main modal is populated
+                const mainIgnoreRulesTA = document.getElementById('shotgun-main-ignore-rules-ta');
+                if (mainIgnoreRulesTA) mainIgnoreRulesTA.value = GM_getValue(CUSTOM_IGNORE_RULES_KEY, DEFAULT_IGNORE_RULES);
+                testIgnoreRule(); // Update tester on open
                 updateStatus('Modal opened. Checking for updates...');
                 checkForUpdates(true); // Force check for updates when modal is opened by the user.
             } else { console.error("[Shotgun Prompter] Modal is null or not in DOM."); updateStatus("Error: Could not display modal.", true); }

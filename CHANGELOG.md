@@ -5,6 +5,14 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2025-05-31
+### Changed
+- Relocated the "Ignore Rules" textarea and its live tester from the Settings modal to the main modal's left panel for easier access.
+- Ignore rules are now saved automatically a short moment after changes are made in the textarea.
+- The file list is automatically updated to reflect changes in ignore rules.
+### Fixed
+- Addressed potential issues with ignore rules not being applied immediately or saved consistently.
+- Incremented script version to `0.6.3`.
 ## [0.6.2] - 2025-05-31
 ### Fixed
 - Ensured that the expansion state of individual folders in the file tree is correctly persisted between sessions when a folder is expanded or collapsed directly by clicking its expander icon. Previously, only "Expand All"/"Collapse All" actions properly saved these states.
