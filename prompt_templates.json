@@ -1,8 +1,14 @@
 [
   {
-    "id": "official_refactor_python",
-    "name": "Official Python Refactor",
-    "content": "Your task is to refactor the provided Python code.\nFocus on:\n1. Readability: Improve variable names, add comments where necessary, simplify complex logic.\n2. Efficiency: Identify and optimize any performance bottlenecks if possible, without sacrificing clarity.\n3. Pythonic Style: Adhere to PEP 8 guidelines and use common Python idioms.\n4. Maintainability: Ensure the refactored code is easy to understand and modify.\n\nExplain your changes briefly *after* providing the refactored code block.\nIf no refactoring is needed for a particular file or section, state that clearly.\nOutput the refactored code first, then your explanations.",
+    "id": "default_git_diff_template",
+    "name": "Official Git Diff",
+    "file": "default_git_diff.md",
+    "isCore": true
+  },
+  {
+    "id": "official_code_refactor_python",
+    "name": "Official Python Code Refactor",
+    "file": "code_refactor_python.md",
     "isCore": true
   }
 ]

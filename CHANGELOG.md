@@ -5,6 +5,14 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2025-05-31
+### Changed
+- Reworked the "Fetch Official Templates" functionality:
+  - `prompt_templates.json` (at project root) now acts as a manifest file, listing official templates and their corresponding `.md` filenames.
+  - The script first fetches this manifest, then fetches each individual `.md` template file from the `prompt_templates/` directory on GitHub.
+- Updated content of `prompt_templates/default_git_diff.md` to include standard git diff instructions.
+### Fixed
+- Incremented script version to `0.6.1`.
 ## [0.6.0] - 2025-05-31
 ### Added
 - Created `prompt_templates.json` at the project root. This file will store official prompt templates fetched via the "Fetch Official Templates" button.

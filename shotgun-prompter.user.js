@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.6.0
+// @version      0.6.1
 // @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.0'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.1'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -769,36 +769,82 @@ Pay attention to the file paths provided in the context.`;
     }
 
     function fetchOfficialPromptTemplates() {
-        updateStatus("Fetching official prompt templates...", false);
+        updateStatus("Fetching official prompt template manifest...", false);
         GM_xmlhttpRequest({
             method: "GET",
             url: OFFICIAL_PROMPT_TEMPLATES_URL + "?t=" + Date.now(), // Cache buster
             onload: function(response) {
                 try {
-                    const officialTemplates = JSON.parse(response.responseText);
-                    if (!Array.isArray(officialTemplates)) throw new Error("Invalid format for official templates.");
-                    let updatedCount = 0; let newCount = 0;
-                    officialTemplates.forEach(officialTpl => {
-                        if (!officialTpl.id || !officialTpl.name || !officialTpl.content) return; // Skip invalid
-                        const existingIndex = promptTemplates.findIndex(t => t.id === officialTpl.id);
-                        const templateData = { ...officialTpl, isCore: true, isOfficial: true }; // Mark as core and official
+                    const manifest = JSON.parse(response.responseText);
+                    if (!Array.isArray(manifest)) throw new Error("Invalid format for official templates manifest.");
 
-                        if (existingIndex > -1) {
-                            promptTemplates[existingIndex] = { ...promptTemplates[existingIndex], ...templateData };
-                            updatedCount++;
-                        } else {
-                            promptTemplates.push(templateData);
-                            newCount++;
+                    if (manifest.length === 0) {
+                        updateStatus("No official templates listed in the manifest.", false);
+                        return;
+                    }
+
+                    updateStatus(`Fetched manifest. Loading ${manifest.length} template(s)...`, false);
+
+                    const fetchPromises = manifest.map(templateInfo => {
+                        if (!templateInfo.id || !templateInfo.name || !templateInfo.file) {
+                            console.warn("[Shotgun Prompter] Invalid template info in manifest, skipping:", templateInfo);
+                            return Promise.resolve(null); // Resolve with null for invalid entries
                         }
+                        const templateUrl = GITHUB_RAW_CONTENT_URL + "prompt_templates/" + templateInfo.file + "?t=" + Date.now();
+                        return new Promise((resolve, reject) => {
+                            GM_xmlhttpRequest({
+                                method: "GET",
+                                url: templateUrl,
+                                onload: function(fileResponse) {
+                                    resolve({
+                                        ...templateInfo, // id, name, isCore from manifest
+                                        content: fileResponse.responseText, // content from the .md file
+                                        isOfficial: true // Mark as official
+                                    });
+                                },
+                                onerror: function(fileResponse) {
+                                    console.error(`[Shotgun Prompter] Error fetching template file ${templateInfo.file}:`, fileResponse);
+                                    reject(new Error(`Failed to fetch ${templateInfo.file}`));
+                                }
+                            });
+                        });
                     });
-                    GM_setValue(CUSTOM_PROMPT_TEMPLATES_KEY, promptTemplates);
-                    renderSettingsTemplateList(); populatePromptTemplateSelect(); updateFinalPrompt();
-                    updateStatus(`Official templates loaded: ${newCount} new, ${updatedCount} updated.`, false);
-                } catch (e) { console.error("[Shotgun Prompter] Error processing official templates:", e); updateStatus("Error processing official templates: " + e.message, true); }
+
+                    Promise.all(fetchPromises)
+                        .then(fetchedTemplates => {
+                            let updatedCount = 0;
+                            let newCount = 0;
+                            fetchedTemplates.filter(t => t !== null).forEach(officialTpl => {
+                                const existingIndex = promptTemplates.findIndex(t => t.id === officialTpl.id);
+                                const templateData = {
+                                    id: officialTpl.id,
+                                    name: officialTpl.name,
+                                    content: officialTpl.content,
+                                    isCore: typeof officialTpl.isCore === 'boolean' ? officialTpl.isCore : false,
+                                    isOfficial: true
+                                };
+
+                                if (existingIndex > -1) {
+                                    promptTemplates[existingIndex] = { ...promptTemplates[existingIndex], ...templateData };
+                                    updatedCount++;
+                                } else {
+                                    promptTemplates.push(templateData);
+                                    newCount++;
+                                }
+                            });
+                            GM_setValue(CUSTOM_PROMPT_TEMPLATES_KEY, promptTemplates);
+                            renderSettingsTemplateList(); populatePromptTemplateSelect(); updateFinalPrompt();
+                            updateStatus(`Official templates loaded: ${newCount} new, ${updatedCount} updated.`, false);
+                        })
+                        .catch(error => {
+                            console.error("[Shotgun Prompter] Error fetching one or more template files:", error);
+                            updateStatus("Error loading some official templates. See console.", true);
+                        });
+                } catch (e) { console.error("[Shotgun Prompter] Error processing official templates manifest:", e, "Response Text:", response.responseText); updateStatus("Error processing official templates manifest: " + e.message, true); }
             },
             onerror: function(response) {
-                console.error("[Shotgun Prompter] Error fetching official templates (network/http error):", response);
-                updateStatus("Failed to fetch official templates (network error). See console.", true);
+                console.error("[Shotgun Prompter] Error fetching official templates manifest (network/http error):", response);
+                updateStatus("Failed to fetch official templates manifest (network error). See console.", true);
             }
         });
     }
