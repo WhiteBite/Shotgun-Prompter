@@ -5,12 +5,17 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2025-05-31
+## [0.5.1] - 2025-05-31
 ### Fixed
-- Ensured settings modal buttons (New Template, Save Template, Delete Template, Fetch Official Templates) are correctly interactive by removing potentially confusing commented-out code.
+- Changed event listener attachment for template management buttons in settings (New, Save, Delete, Fetch Official) to use direct `onclick` properties to ensure reliability.
 
 ### Changed
-- Incremented script version to 0.5.0.
+- Incremented script version to 0.5.1.
+
+## [0.5.0] - 2025-05-31
+### Fixed
+- Ensured settings modal buttons (New Template, Save Template, Delete Template, Fetch Official Templates) are correctly interactive by removing potentially confusing commented-out code. (This was the intention, but the issue persisted).
+### Changed
 - Removed legacy commented-out code and development console logs from template management functions.
 ### Added
 - Version checking mechanism: The script will now check `latest_version.json` on GitHub for updates and notify the user. (Requires GM_xmlhttpRequest)

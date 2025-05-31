@@ -2,8 +2,8 @@
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
 // @version      0.4.9
-// @version      0.5.0
-// @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates. Cleaned up some legacy comments.
+// @version      0.5.1
+// @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates. Changed event listener attachment for template buttons.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
@@ -850,14 +850,31 @@ Pay attention to the file paths provided in the context.`;
         templateEditDiv.appendChild(createElementWithProps('label', { textContent: 'Template Content:', for: 'shotgun-settings-template-content' }));
         settingsTemplateContentTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-template-content', class: 'shotgun-textarea', style: 'height: 150px; resize: vertical;' }); templateEditDiv.appendChild(settingsTemplateContentTextarea);
         const templateButtonsDiv = createElementWithProps('div', { class: 'shotgun-settings-template-buttons' });
-        const newTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'New Template' }); newTemplateBtn.addEventListener('click', clearTemplateEditFields); templateButtonsDiv.appendChild(newTemplateBtn);
 
-        const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template' }); saveTemplateBtn.addEventListener('click', handleSaveTemplate); templateButtonsDiv.appendChild(saveTemplateBtn);
+        const newTemplateBtn = createElementWithProps('button', {
+            class: 'shotgun-button', textContent: 'New Template',
+            onclick: clearTemplateEditFields
+        });
+        templateButtonsDiv.appendChild(newTemplateBtn);
 
-        const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '' }); deleteTemplateBtn.addEventListener('click', handleDeleteTemplate); templateButtonsDiv.appendChild(deleteTemplateBtn);
+        const saveTemplateBtn = createElementWithProps('button', {
+            class: 'shotgun-button', textContent: 'Save Template',
+            onclick: handleSaveTemplate
+        });
+        templateButtonsDiv.appendChild(saveTemplateBtn);
 
-        const fetchOfficialBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub' });
-        fetchOfficialBtn.addEventListener('click', fetchOfficialPromptTemplates); templateButtonsDiv.appendChild(fetchOfficialBtn);
+        const deleteTemplateBtn = createElementWithProps('button', {
+            id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '',
+            onclick: handleDeleteTemplate
+        });
+        templateButtonsDiv.appendChild(deleteTemplateBtn);
+
+        const fetchOfficialBtn = createElementWithProps('button', {
+            class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub',
+            onclick: fetchOfficialPromptTemplates
+        });
+        templateButtonsDiv.appendChild(fetchOfficialBtn);
+
         templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection); 
 
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
