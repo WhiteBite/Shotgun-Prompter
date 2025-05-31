@@ -1,7 +1,6 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.4.9
 // @version      0.5.1
 // @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates. Changed event listener attachment for template buttons.
 // @author       Your Name (based on Shotgun Code concept)
