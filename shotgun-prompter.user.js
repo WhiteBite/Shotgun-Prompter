@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.6.2
 // @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.1'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.2'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -324,7 +324,9 @@ Pay attention to the file paths provided in the context.`;
             entryDiv.appendChild(checkbox); const iconSpan = document.createElement('span'); iconSpan.className = 'shotgun-tree-icon';
             if (item._isDir) {
                 const expander = createElementWithProps('span', { class: 'shotgun-tree-expander', textContent: item._expanded ? '▼' : '▶' });
-                expander.onclick = () => { item._expanded = !item._expanded; renderFileList(); };
+                expander.onclick = () => {
+                    toggleNodeExpansion(item, !item._expanded); // This will handle state update, persistence, and re-render
+                };
                 iconSpan.appendChild(expander);
             }
             iconSpan.appendChild(document.createTextNode(item._isDir ? '📁' : '📄'));
