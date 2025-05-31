@@ -5,6 +5,54 @@ All notable changes to the "AI Studio Shotgun Prompter" will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2025-05-31
+### Changed
+### Fixed
+- Corrected a `ReferenceError` in `renderTreeRecursiveDOM` that occurred when "Apply Ignore Rules" was active, due to attempting to access `checkbox.id` when the checkbox was not created.
+- Improved `.gitignore` pattern matching in `isPathIgnored` for patterns ending with `/` and patterns without slashes (e.g., `.git` vs `.git/`).
+- Implemented loading of rules from a `.gitignore` file found in the root of the selected folder. These rules are combined with manually entered rules.
+- Ignored files/folders are now hidden from the file tree view when "Apply Ignore Rules" is active, instead of being struck out. Individual selection checkboxes are also hidden in this mode.
+- Removed the "Test Path" input and result display from the Ignore Rules section on the main panel.
+- Updated the label for the ignore rules checkbox to "Apply Ignore Rules (.gitignore & manual)" for clarity.
+- Added `flex-shrink: 0` to the "Use .gitignore rules" checkbox container to prevent it from being hidden on smaller panel widths.
+### Fixed
+- Incremented script version to `0.7.0`.
+
+## [0.6.9] - 2025-05-31
+### Added
+- Added a checkbox "Use .gitignore rules" to enable/disable the application of ignore rules. When disabled, the ignore rules textarea and path tester are also disabled.
+- Implemented a dedicated error display area on the main modal for file read errors. Errors during context generation (e.g., file changed during read) will now appear here instead of being embedded in the generated context.
+### Changed
+- Incremented script version to `0.6.9`.
+
+
+## [0.6.8] - 2025-05-31
+### Fixed
+- Ensured that ignore patterns are checked against paths truly relative to the selected project root. This corrects an issue where patterns like `.git/` or `node_modules/` might not work if the selected path included the project's root folder name (e.g., `ProjectName/.git/` vs. pattern `.git/`).
+- Improved error message detail when a file reading operation fails (e.g., if a file is modified during reading), providing more specific error information instead of just "ProgressEvent".
+### Changed
+- Incremented script version to `0.6.8`.
+
+## [0.6.7] - 2025-05-31
+### Fixed
+- Corrected .gitignore pattern matching for rules without slashes (e.g., `.git`, `build`, `*.log`). Ensures that such patterns correctly match files or directories (including their contents) anywhere in the tree, aligning more closely with standard .gitignore behavior. This specifically addresses issues where directory names containing dots (like `.git` or `.idea`) were not being ignored as directories.
+### Changed
+- Incremented script version to `0.6.7`.
+
+## [0.6.6] - 2025-05-31
+### Fixed
+- Further refined regex construction in `isPathIgnored` for more accurate .gitignore pattern matching, ensuring correct anchoring for various pattern types (root-anchored, directory-specific, file-specific, and global).
+- Corrected escaping of special characters in `patternToRegexString` to prevent misinterpretation of regex metacharacters within ignore patterns.
+### Changed
+- Incremented script version to `0.6.6`.
+
+## [0.6.5] - 2025-05-31
+### Fixed
+- Corrected an issue in `patternToRegexString` where `?` was replaced with `.` instead of `[^/]`, improving .gitignore compatibility for single-character wildcards.
+- Refined regex construction in `isPathIgnored` to better handle various .gitignore pattern types (anchored, directory, file, glob-like).
+### Changed
+- Incremented script version to `0.6.5`.
+
 ## [0.6.4] - 2025-05-31
 ### Changed
 - Improved styling for the "Ignore Rules" section (textarea and live tester) on the main modal's left panel for better visual integration and usability.
@@ -67,78 +115,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified comment for forced update check on modal open.
 ## [0.5.5] - 2025-05-31
 ### Fixed
-- Added more detailed logging within `createElementWithProps` for `onclick` assignments to diagnose button non-interactivity.
-
-### Changed
-- Incremented script version to `0.5.5`.
-
-## [0.5.4] - 2025-05-31
-### Fixed
-- Addressed `TrustedHTML` error when displaying update notifications by modifying `updateStatus` to avoid direct `innerHTML` assignment for node messages.
-
-### Changed
-- Incremented script version to `0.5.4`.
-## [0.5.3] - 2025-05-31
-### Fixed
-- Made `checkForUpdates` more aggressive by default when opening the modal (forceCheck=true) to aid update testing.
-- Added a prominent script version log at the very start of execution.
-### Changed
-- Incremented script version to 0.5.3.
-## [0.5.2] - 2025-05-31
-### Fixed
-- Added extensive logging to template management button handlers (`clearTemplateEditFields`, `handleSaveTemplate`, `handleDeleteTemplate`, `fetchOfficialPromptTemplates`) to diagnose click issues.
-- Modified `checkForUpdates` to be more aggressive for testing (temporarily ignoring check interval) and to improve update notification persistence.
-### Changed
-- Incremented script version to 0.5.2.
-
-## [0.5.1] - 2025-05-31
-### Fixed
-- Changed event listener attachment for template management buttons in settings (New, Save, Delete, Fetch Official) to use direct `onclick` properties to ensure reliability.
-
-### Changed
-- Incremented script version to 0.5.1.
-## [0.5.0] - 2025-05-31
-### Fixed
-- Ensured settings modal buttons (New Template, Save Template, Delete Template, Fetch Official Templates) are correctly interactive by removing potentially confusing commented-out code. (This was the intention, but the issue persisted).
-### Changed
-- Removed legacy commented-out code and development console logs from template management functions.
-### Added
-- Version checking mechanism: The script will now check `latest_version.json` on GitHub for updates and notify the user. (Requires GM_xmlhttpRequest)
-- `@downloadURL` and `@updateURL` in script metadata for Tampermonkey auto-updates.
-
-## [0.4.8] - YYYY-MM-DD *(Adjust date to your release date)*
-
-### Added
-- Initial public release.
-- Core functionality: Folder selection, file tree display with include/exclude.
-- Ignore rules based on `.gitignore` syntax, with live tester in settings.
-- Context generation (file structure + content).
-- Prompt templating system (core + custom templates).
-- Draggable, resizable modal UI with split panels.
-- Settings:
-    - Ignore rules management.
-    - File handling options (max size, truncation, skip binary).
-    - Prompt template management (CRUD).
-    - Import/Export all script settings.
-    - Reset all settings.
-- UI persistence for modal size/position, panel sizes, textarea heights.
-- "Copy Context" and "Copy Final Prompt" buttons.
-- Status messages and character/token count statistics.
-- Minimize modal option.
-- Russian localization for some UI elements ("Выбор папки", etc.).
-
----
-*Template for future entries:*
-## [Version.Number.Patch] - YYYY-MM-DD
-### Added
--
-### Changed
--
-### Deprecated
--
-### Removed
--
-### Fixed
--
-### Security
--
+- Added more detailed logging within `createElementWithProps`
