@@ -1,7 +1,7 @@
 # AI Studio Shotgun Prompter
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Version](https://img.shields.io/badge/version-0.4.8-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 
 A Tampermonkey UserScript to help formulate complex prompts for AI Studio (e.g., Google's Gemini) by using local project files as context. Inspired by the "shotgun surgery" concept in coding, this script allows you to quickly gather relevant code and project structure to feed to the AI.
 

@@ -2,7 +2,8 @@
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
 // @version      0.4.9
-// @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates.
+// @version      0.5.0
+// @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates. Cleaned up some legacy comments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
@@ -18,8 +19,6 @@
 
 (function() {
     'use strict';
-
-    // console.log("[Shotgun Prompter] Script execution started (v0.4.9).");
 
     const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A';
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
@@ -673,7 +672,6 @@ Pay attention to the file paths provided in the context.`;
     function clearTemplateEditFields() {
         if (settingsTemplateNameInput && settingsTemplateContentTextarea && settingsTemplateListDiv) {
             settingsSelectedTemplateId = null; settingsTemplateNameInput.value = ''; settingsTemplateContentTextarea.value = '';
-            console.log('[Shotgun Prompter] Cleared template edit fields.');
             settingsTemplateNameInput.disabled = false; settingsTemplateContentTextarea.disabled = false;
             Array.from(settingsTemplateListDiv.children).forEach(child => child.classList.remove('selected'));
             const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = true; // No template selected, so disable delete
@@ -681,7 +679,6 @@ Pay attention to the file paths provided in the context.`;
     }
     function handleSaveTemplate() {
         const name = settingsTemplateNameInput.value.trim(); const content = settingsTemplateContentTextarea.value;
-        console.log('[Shotgun Prompter] handleSaveTemplate called. Name:', name, 'Selected ID:', settingsSelectedTemplateId);
         if (!name || !content) { updateStatus("Template name and content cannot be empty.", true); return; }
         if (settingsSelectedTemplateId) {
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
@@ -698,7 +695,6 @@ Pay attention to the file paths provided in the context.`;
     }
     function handleDeleteTemplate() {
         if (settingsSelectedTemplateId) {
-            console.log('[Shotgun Prompter] handleDeleteTemplate called for ID:', settingsSelectedTemplateId);
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
             if (template && (template.isCore || template.isOfficial)) { updateStatus("Core/Official templates cannot be deleted.", true); return; }
             if (template && confirm(`Are you sure you want to delete template "${template.name}"?`)) {
@@ -768,14 +764,12 @@ Pay attention to the file paths provided in the context.`;
 
     function fetchOfficialPromptTemplates() {
         updateStatus("Fetching official prompt templates...", false);
-        console.log('[Shotgun Prompter] fetchOfficialPromptTemplates called.');
         GM_xmlhttpRequest({
             method: "GET",
             url: OFFICIAL_PROMPT_TEMPLATES_URL + "?t=" + Date.now(), // Cache buster
             onload: function(response) {
                 try {
                     const officialTemplates = JSON.parse(response.responseText);
-                    console.log('[Shotgun Prompter] Fetched official templates:', officialTemplates);
                     if (!Array.isArray(officialTemplates)) throw new Error("Invalid format for official templates.");
                     let updatedCount = 0; let newCount = 0;
                     officialTemplates.forEach(officialTpl => {
@@ -857,29 +851,13 @@ Pay attention to the file paths provided in the context.`;
         settingsTemplateContentTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-template-content', class: 'shotgun-textarea', style: 'height: 150px; resize: vertical;' }); templateEditDiv.appendChild(settingsTemplateContentTextarea);
         const templateButtonsDiv = createElementWithProps('div', { class: 'shotgun-settings-template-buttons' });
         const newTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'New Template' }); newTemplateBtn.addEventListener('click', clearTemplateEditFields); templateButtonsDiv.appendChild(newTemplateBtn);
-        // newTemplateBtn.addEventListener('click', () => {
-        //     console.log('New Template button clicked (direct log)');
-        //     clearTemplateEditFields();
-        // });
 
         const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template' }); saveTemplateBtn.addEventListener('click', handleSaveTemplate); templateButtonsDiv.appendChild(saveTemplateBtn);
-        // saveTemplateBtn.addEventListener('click', () => {
-        //     console.log('Save Template button clicked (direct log)');
-        //     handleSaveTemplate();
-        // });
 
         const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '' }); deleteTemplateBtn.addEventListener('click', handleDeleteTemplate); templateButtonsDiv.appendChild(deleteTemplateBtn);
-        // deleteTemplateBtn.addEventListener('click', () => {
-        //     console.log('Delete Template button clicked (direct log)');
-        //     handleDeleteTemplate();
-        // });
 
         const fetchOfficialBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub' });
         fetchOfficialBtn.addEventListener('click', fetchOfficialPromptTemplates); templateButtonsDiv.appendChild(fetchOfficialBtn);
-        // fetchOfficialBtn.addEventListener('click', () => {
-        //     console.log('Fetch Official Templates button clicked (direct log)');
-        //     fetchOfficialPromptTemplates();
-        // });
         templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection); 
 
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
