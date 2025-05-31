@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.5.5
+// @version      0.6.0
 // @description  Formulate prompts for AI Studio. Enhanced logging for button event assignments.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.5.5'; // Fallback for safety
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : '0.6.0'; // Fallback for safety
     const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
     console.log(`[Shotgun Prompter] Running version ${SCRIPT_VERSION}. GM_info version: ${(typeof GM_info !== 'undefined' && GM_info.script) ? GM_info.script.version : 'N/A'}`);
     const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
@@ -100,7 +100,6 @@ Pay attention to the file paths provided in the context.`;
         targetDiv.textContent = message;
         targetDiv.style.color = isError ? 'red' : (message.includes("Generating") || message.includes("Processing") ? 'orange' : 'green');
         targetDiv.style.cursor = 'default';
-        // if (!isVersionCheck) logHelper(message); // Avoid logging version checks too often
     }
     function copyToClipboard(text, buttonElement, successMessage = "Copied!") {
         if (!text) return;
@@ -120,10 +119,6 @@ Pay attention to the file paths provided in the context.`;
             if (key === 'textContent') el.textContent = props[key];
             else if (key.startsWith('on') && typeof props[key] === 'function') {
                 el[key] = props[key];
-                // Enhanced logging for event handlers, especially onclick
-                if (key === 'onclick') {
-                    console.log(`[Shotgun Prompter] createElementWithProps: Assigned ${typeof props[key]} to ${key} for element:`, el.tagName, el.id || el.className, el.textContent);
-                }
             } else if (key.startsWith('on') && typeof props[key] !== 'function') {
                  console.warn(`[Shotgun Prompter] createElementWithProps: Attempted to assign non-function to event ${key} for element:`, el.tagName, el.id || el.className, el.textContent, 'Value:', props[key]);
             }
@@ -176,14 +171,17 @@ Pay attention to the file paths provided in the context.`;
 
             let regexPatternString;
             let isDirPattern = pattern.endsWith('/');
+
             if (isDirPattern) {
-                regexPatternString = '^' + patternToRegexString(pattern.slice(0, -1)) + '(/.*|$)';
+                regexPatternString = '^' + patternToRegexString(pattern.slice(0, -1)) + '(/.*|$)'; // Matches "dir/" or "dir/anything"
+            } else if (pattern.includes('/')) {
+                regexPatternString = '^' + patternToRegexString(pattern) + '$'; // Matches "path/to/file" or "path/*.ext" at root
             } else {
                 regexPatternString = '^' + patternToRegexString(pattern) + '$';
             }
             const regex = new RegExp(regexPatternString);
 
-            if (regex.test(normalizedRelPath) || (!pattern.includes('/') && !isDirPattern && regex.test(normalizedRelPath.split('/').pop()))) {
+            if (regex.test(normalizedRelPath)) {
                 if (isNegated) ignored = false; else ignored = true;
             }
         }
@@ -678,7 +676,6 @@ Pay attention to the file paths provided in the context.`;
         }
     }
     function clearTemplateEditFields() {
-        console.log('[Shotgun Prompter] clearTemplateEditFields called');
         if (settingsTemplateNameInput && settingsTemplateContentTextarea && settingsTemplateListDiv) {
             settingsSelectedTemplateId = null; settingsTemplateNameInput.value = ''; settingsTemplateContentTextarea.value = '';
             settingsTemplateNameInput.disabled = false; settingsTemplateContentTextarea.disabled = false;
@@ -687,7 +684,6 @@ Pay attention to the file paths provided in the context.`;
         }
     }
     function handleSaveTemplate() {
-        console.log('[Shotgun Prompter] handleSaveTemplate called');
         const name = settingsTemplateNameInput.value.trim(); const content = settingsTemplateContentTextarea.value;
         if (!name || !content) { updateStatus("Template name and content cannot be empty.", true); return; }
         if (settingsSelectedTemplateId) {
@@ -704,7 +700,6 @@ Pay attention to the file paths provided in the context.`;
         updateStatus("Prompt template saved.", false);
     }
     function handleDeleteTemplate() {
-        console.log('[Shotgun Prompter] handleDeleteTemplate called');
         if (settingsSelectedTemplateId) {
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
             if (template && (template.isCore || template.isOfficial)) { updateStatus("Core/Official templates cannot be deleted.", true); return; }
@@ -774,13 +769,11 @@ Pay attention to the file paths provided in the context.`;
     }
 
     function fetchOfficialPromptTemplates() {
-        console.log('[Shotgun Prompter] fetchOfficialPromptTemplates called');
         updateStatus("Fetching official prompt templates...", false);
         GM_xmlhttpRequest({
             method: "GET",
             url: OFFICIAL_PROMPT_TEMPLATES_URL + "?t=" + Date.now(), // Cache buster
             onload: function(response) {
-                console.log('[Shotgun Prompter] Fetched official templates response:', response.responseText);
                 try {
                     const officialTemplates = JSON.parse(response.responseText);
                     if (!Array.isArray(officialTemplates)) throw new Error("Invalid format for official templates.");
@@ -810,23 +803,14 @@ Pay attention to the file paths provided in the context.`;
         });
     }
 
-    function createSettingsModal() {
-        if (document.getElementById('shotgun-settings-modal')) return;
-        settingsModal = createElementWithProps('div', { id: 'shotgun-settings-modal', class: 'shotgun-modal shotgun-settings-submodal' });
-        const modalContent = createElementWithProps('div', { class: 'shotgun-modal-content' });
-        modalContent.style.resize = 'both';
-        const modalHeader = createElementWithProps('div', { class: 'shotgun-modal-header' });
-        modalHeader.onmousedown = (event) => { if (event.target.closest('.shotgun-control-btn, input, textarea, select, button')) return; let sm = document.getElementById('shotgun-settings-modal'); if (sm) { let isSMDragging = true; let smDragOffsetX = event.clientX - sm.offsetLeft; let smDragOffsetY = event.clientY - sm.offsetTop; const onSMDragging = (e) => { if (isSMDragging) { e.preventDefault(); sm.style.left = (e.clientX - smDragOffsetX) + 'px'; sm.style.top = (e.clientY - smDragOffsetY) + 'px'; sm.style.transform = ''; } }; const onSMDragEnd = () => { if (isSMDragging) { isSMDragging = false; document.removeEventListener('mousemove', onSMDragging); document.removeEventListener('mouseup', onSMDragEnd); saveModalPositionAndSize(sm, SETTINGS_MODAL_SIZE_KEY, null); } }; document.addEventListener('mousemove', onSMDragging); document.addEventListener('mouseup', onSMDragEnd); }};
-        modalHeader.appendChild(createElementWithProps('h2', { textContent: 'Shotgun Prompter Settings' }));
-        const closeBtn = createElementWithProps('span', { class: 'shotgun-control-btn shotgun-close-btn', textContent: '×' });
-        closeBtn.addEventListener('click', () => { saveSettings(); if(settingsModal) settingsModal.style.display = 'none'; });
-        modalHeader.appendChild(closeBtn);
-        const modalBody = createElementWithProps('div', { class: 'shotgun-modal-body', style: 'flex-direction: column;' });
-        modalBody.appendChild(createElementWithProps('h3', { textContent: 'Ignore Rules' }));
+    function createSettingsIgnoreRulesSection() {
+        const sectionDiv = createElementWithProps('div');
+        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'Ignore Rules' }));
         settingsIgnoreRulesTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-ignore-rules-ta', class: 'shotgun-textarea', style: `height: ${GM_getValue(TA_IGNORE_RULES_HEIGHT_KEY, '100px')}; resize: vertical;`, placeholder: DEFAULT_IGNORE_RULES });
         settingsIgnoreRulesTextarea.addEventListener('mouseup', () => saveElementHeight(settingsIgnoreRulesTextarea, TA_IGNORE_RULES_HEIGHT_KEY));
         settingsIgnoreRulesTextarea.addEventListener('input', testIgnoreRule);
-        modalBody.appendChild(settingsIgnoreRulesTextarea);
+        sectionDiv.appendChild(settingsIgnoreRulesTextarea);
+
         const testerDiv = createElementWithProps('div', {class: 'shotgun-settings-ignore-tester'});
         testerDiv.appendChild(createElementWithProps('label', {textContent: 'Test Path:', for: 'shotgun-ignore-tester-path'}));
         settingsIgnoreTesterPathInput = createElementWithProps('input', {type: 'text', id: 'shotgun-ignore-tester-path', class: 'shotgun-input', placeholder: 'e.g., node_modules/file.js or src/my_file.txt'});
@@ -834,8 +818,13 @@ Pay attention to the file paths provided in the context.`;
         testerDiv.appendChild(settingsIgnoreTesterPathInput);
         settingsIgnoreTesterResultSpan = createElementWithProps('span', {id: 'shotgun-ignore-tester-result', style: 'margin-left: 10px; font-weight: bold;'});
         testerDiv.appendChild(settingsIgnoreTesterResultSpan);
-        modalBody.appendChild(testerDiv);
-        modalBody.appendChild(createElementWithProps('h3', { textContent: 'File Handling' }));
+        sectionDiv.appendChild(testerDiv);
+        return sectionDiv;
+    }
+
+    function createSettingsFileHandlingSection() {
+        const sectionDiv = createElementWithProps('div');
+        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'File Handling' }));
         const fhGrid = createElementWithProps('div', { class: 'shotgun-settings-grid' });
         fhGrid.appendChild(createElementWithProps('label', {textContent: 'Max File Size (KB, 0 for unlimited):', for: 'shotgun-max-file-size'}));
         settingsMaxFileSizeInput = createElementWithProps('input', {type: 'number', id: 'shotgun-max-file-size', class: 'shotgun-input', min: '0'});
@@ -846,71 +835,110 @@ Pay attention to the file paths provided in the context.`;
             createElementWithProps('option', {value: 'truncate_chars', textContent: 'Truncate (Characters)'}),
             createElementWithProps('option', {value: 'truncate_lines', textContent: 'Truncate (Lines)'}),
         ]);
-        settingsFileSizeActionSelect.onchange = toggleTruncateValueVisibility;
+        settingsFileSizeActionSelect.addEventListener('change', toggleTruncateValueVisibility);
         fhGrid.appendChild(settingsFileSizeActionSelect);
         const truncateValueLabel = createElementWithProps('label', {textContent: 'Truncate to (chars/lines):', for: 'shotgun-truncate-value'});
         settingsTruncateValueInput = createElementWithProps('input', {type: 'number', id: 'shotgun-truncate-value', class: 'shotgun-input', min: '1'});
         const truncateWrapper = createElementWithProps('div', {}, [truncateValueLabel, settingsTruncateValueInput]);
-        fhGrid.appendChild(truncateWrapper);
+        fhGrid.appendChild(truncateWrapper); // This will be a child of fhGrid, needs to span 2 columns or be adjusted in CSS if grid expects direct children
         const skipBinaryLabel = createElementWithProps('label', {textContent: 'Skip Binary Files:', for: 'shotgun-skip-binary'});
         settingsSkipBinaryCheckbox = createElementWithProps('input', {type: 'checkbox', id: 'shotgun-skip-binary', style: 'width: auto; margin-left: 5px;'});
         const skipBinaryWrapper = createElementWithProps('div', {style: 'display: flex; align-items: center;'}, [skipBinaryLabel, settingsSkipBinaryCheckbox]);
-        fhGrid.appendChild(skipBinaryWrapper);
-        modalBody.appendChild(fhGrid);
-        modalBody.appendChild(createElementWithProps('h3', { textContent: 'Prompt Templates' }));
+        fhGrid.appendChild(skipBinaryWrapper); // Same as above, grid child
+        sectionDiv.appendChild(fhGrid);
+        return sectionDiv;
+    }
+
+    function createSettingsPromptTemplatesSection() {
+        const sectionDiv = createElementWithProps('div');
+        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'Prompt Templates' }));
         const templateSection = createElementWithProps('div', { class: 'shotgun-settings-template-section' });
-        settingsTemplateListDiv = createElementWithProps('div', { class: 'shotgun-settings-template-list' }); templateSection.appendChild(settingsTemplateListDiv);
+        settingsTemplateListDiv = createElementWithProps('div', { class: 'shotgun-settings-template-list' });
+        templateSection.appendChild(settingsTemplateListDiv);
+
         const templateEditDiv = createElementWithProps('div', { class: 'shotgun-settings-template-edit' });
         templateEditDiv.appendChild(createElementWithProps('label', { textContent: 'Template Name:', for: 'shotgun-settings-template-name' }));
-        settingsTemplateNameInput = createElementWithProps('input', { type: 'text', id: 'shotgun-settings-template-name', class: 'shotgun-input' }); templateEditDiv.appendChild(settingsTemplateNameInput);
+        settingsTemplateNameInput = createElementWithProps('input', { type: 'text', id: 'shotgun-settings-template-name', class: 'shotgun-input' });
+        templateEditDiv.appendChild(settingsTemplateNameInput);
         templateEditDiv.appendChild(createElementWithProps('label', { textContent: 'Template Content:', for: 'shotgun-settings-template-content' }));
-        settingsTemplateContentTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-template-content', class: 'shotgun-textarea', style: 'height: 150px; resize: vertical;' }); templateEditDiv.appendChild(settingsTemplateContentTextarea);
-        const templateButtonsDiv = createElementWithProps('div', { class: 'shotgun-settings-template-buttons' });
+        settingsTemplateContentTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-template-content', class: 'shotgun-textarea', style: 'height: 150px; resize: vertical;' });
+        templateEditDiv.appendChild(settingsTemplateContentTextarea);
 
-        const newTemplateBtn = createElementWithProps('button', {
-            class: 'shotgun-button', textContent: 'New Template',
-            onclick: clearTemplateEditFields
-        });
+        const templateButtonsDiv = createElementWithProps('div', { class: 'shotgun-settings-template-buttons' });
+        const newTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'New Template'});
+        newTemplateBtn.addEventListener('click', clearTemplateEditFields);
         templateButtonsDiv.appendChild(newTemplateBtn);
 
-        const saveTemplateBtn = createElementWithProps('button', {
-            class: 'shotgun-button', textContent: 'Save Template',
-            onclick: handleSaveTemplate
-        });
+        const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template'});
+        saveTemplateBtn.addEventListener('click', handleSaveTemplate);
         templateButtonsDiv.appendChild(saveTemplateBtn);
 
-        const deleteTemplateBtn = createElementWithProps('button', {
-            id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '',
-            onclick: handleDeleteTemplate
-        });
+        const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template'});
+        deleteTemplateBtn.disabled = true; // Will be enabled/disabled by selectTemplateForEditing/clearTemplateEditFields
+        deleteTemplateBtn.addEventListener('click', handleDeleteTemplate);
         templateButtonsDiv.appendChild(deleteTemplateBtn);
 
-        const fetchOfficialBtn = createElementWithProps('button', {
-            class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub',
-            onclick: fetchOfficialPromptTemplates
-        });
+        const fetchOfficialBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub'});
+        fetchOfficialBtn.addEventListener('click', fetchOfficialPromptTemplates);
         templateButtonsDiv.appendChild(fetchOfficialBtn);
 
-        templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection); 
+        templateEditDiv.appendChild(templateButtonsDiv);
+        templateSection.appendChild(templateEditDiv);
+        sectionDiv.appendChild(templateSection);
+        return sectionDiv;
+    }
 
-        modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
-        const ieDiv = createElementWithProps('div', { class: 'shotgun-settings-import-export' }); // Changed from grid to simple div
+    function createSettingsImportExportSection() {
+        const sectionDiv = createElementWithProps('div');
+        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
+        const ieDiv = createElementWithProps('div', { class: 'shotgun-settings-import-export' });
         const exportBtn = createElementWithProps('button', {class: 'shotgun-button', textContent: 'Export Settings'});
-        exportBtn.onclick = exportSettings;
+        exportBtn.addEventListener('click', exportSettings);
         ieDiv.appendChild(exportBtn);
-        const importLabel = createElementWithProps('label', {class: 'shotgun-button', textContent: 'Import Settings', for: 'shotgun-import-settings-input', style: 'margin-left: 10px;'}); // Added margin
+
+        const importLabel = createElementWithProps('label', {class: 'shotgun-button', textContent: 'Import Settings', for: 'shotgun-import-settings-input', style: 'margin-left: 10px;'});
         const importInput = createElementWithProps('input', {type: 'file', id: 'shotgun-import-settings-input', accept: '.json', style: 'display: none;'});
-        importInput.onchange = importSettings;
+        importInput.addEventListener('change', importSettings);
         ieDiv.appendChild(importLabel);
         ieDiv.appendChild(importInput);
-        modalBody.appendChild(ieDiv);
+        sectionDiv.appendChild(ieDiv);
+        return sectionDiv;
+    }
 
-        modalBody.appendChild(createElementWithProps('h3', { textContent: 'General' }));
-        const resetAllBtn = createElementWithProps('button', { class: 'shotgun-button shotgun-button-danger', textContent: 'Reset All Prompter Settings' }); resetAllBtn.addEventListener('click', handleResetAllSettings); modalBody.appendChild(resetAllBtn);
+    function createSettingsGeneralSection() {
+        const sectionDiv = createElementWithProps('div');
+        sectionDiv.appendChild(createElementWithProps('h3', { textContent: 'General' }));
+        const resetAllBtn = createElementWithProps('button', { class: 'shotgun-button shotgun-button-danger', textContent: 'Reset All Prompter Settings' });
+        resetAllBtn.addEventListener('click', handleResetAllSettings);
+        sectionDiv.appendChild(resetAllBtn);
+        return sectionDiv;
+    }
+
+    function createSettingsModal() {
+        if (document.getElementById('shotgun-settings-modal')) return;
+
+        settingsModal = createElementWithProps('div', { id: 'shotgun-settings-modal', class: 'shotgun-modal shotgun-settings-submodal' });
+        const modalContent = createElementWithProps('div', { class: 'shotgun-modal-content' });
+        const modalHeader = createElementWithProps('div', { class: 'shotgun-modal-header' });
+        modalHeader.onmousedown = (event) => { if (event.target.closest('.shotgun-control-btn, input, textarea, select, button')) return; let sm = document.getElementById('shotgun-settings-modal'); if (sm) { let isSMDragging = true; let smDragOffsetX = event.clientX - sm.offsetLeft; let smDragOffsetY = event.clientY - sm.offsetTop; const onSMDragging = (e) => { if (isSMDragging) { e.preventDefault(); sm.style.left = (e.clientX - smDragOffsetX) + 'px'; sm.style.top = (e.clientY - smDragOffsetY) + 'px'; sm.style.transform = ''; } }; const onSMDragEnd = () => { if (isSMDragging) { isSMDragging = false; document.removeEventListener('mousemove', onSMDragging); document.removeEventListener('mouseup', onSMDragEnd); saveModalPositionAndSize(sm, SETTINGS_MODAL_SIZE_KEY, null); } }; document.addEventListener('mousemove', onSMDragging); document.addEventListener('mouseup', onSMDragEnd); }};
+        modalHeader.appendChild(createElementWithProps('h2', { textContent: 'Shotgun Prompter Settings' }));
+        const closeBtn = createElementWithProps('span', { class: 'shotgun-control-btn shotgun-close-btn', textContent: '×' });
+        closeBtn.addEventListener('click', () => { saveSettings(); if(settingsModal) settingsModal.style.display = 'none'; });
+        modalHeader.appendChild(closeBtn);
+
+        const modalBody = createElementWithProps('div', { class: 'shotgun-modal-body', style: 'flex-direction: column;' });
+        
+        modalBody.appendChild(createSettingsIgnoreRulesSection());
+        modalBody.appendChild(createSettingsFileHandlingSection());
+        modalBody.appendChild(createSettingsPromptTemplatesSection());
+        modalBody.appendChild(createSettingsImportExportSection());
+        modalBody.appendChild(createSettingsGeneralSection());
+
         const modalFooter = createElementWithProps('div', { class: 'shotgun-modal-footer' });
         const saveAndCloseBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save & Close Settings' });
         saveAndCloseBtn.addEventListener('click', () => { saveSettings(); if(settingsModal) settingsModal.style.display = 'none'; });
         modalFooter.appendChild(saveAndCloseBtn);
+
         modalContent.appendChild(modalHeader); modalContent.appendChild(modalBody); modalContent.appendChild(modalFooter);
         settingsModal.appendChild(modalContent);
         if (document.body) {
@@ -963,29 +991,24 @@ Pay attention to the file paths provided in the context.`;
         updateStatus(fragment, false, true);
     }
 
-    function checkForUpdates(forceCheck = false) { // Added forceCheck for testing
+    function checkForUpdates(forceCheck = false) {
         const lastCheck = GM_getValue(LAST_VERSION_CHECK_KEY, 0);
         const timeSinceLastCheck = Date.now() - lastCheck;
-        console.log(`[Shotgun Prompter] checkForUpdates: SCRIPT_VERSION=${SCRIPT_VERSION}. Last check: ${new Date(lastCheck).toLocaleString()}. Time since: ${timeSinceLastCheck/1000}s. Interval: ${CHECK_VERSION_INTERVAL/1000}s. Force check: ${forceCheck}`);
+
         if (!forceCheck && timeSinceLastCheck < CHECK_VERSION_INTERVAL) {
-            console.log("[Shotgun Prompter] Version check interval not yet passed and not forced.");
             const storedRemoteData = GM_getValue(LATEST_REMOTE_VERSION_DATA_KEY, null);
             if (storedRemoteData && storedRemoteData.version && compareVersions(storedRemoteData.version, SCRIPT_VERSION) > 0) {
-                console.log("[Shotgun Prompter] Redisplaying stored update notification for version " + storedRemoteData.version);
                 displayUpdateNotification(storedRemoteData.version, storedRemoteData.update_url, storedRemoteData.changelog_url);
             }
             return;
         }
-        console.log("[Shotgun Prompter] Proceeding with version check API call.");
         GM_xmlhttpRequest({
             method: "GET",
             url: VERSION_CHECK_URL + "?t=" + Date.now(), // Cache buster
             onload: function(response) {
                 GM_setValue(LAST_VERSION_CHECK_KEY, Date.now());
                 try {
-                    const remoteVersionData = JSON.parse(response.responseText);
-                    const remoteVersion = remoteVersionData.version;
-                    console.log(`[Shotgun Prompter] Remote version data fetched:`, remoteVersionData, `Local version: ${SCRIPT_VERSION}`);
+                    const remoteVersionData = JSON.parse(response.responseText); const remoteVersion = remoteVersionData.version;
                     if (remoteVersion && compareVersions(remoteVersion, SCRIPT_VERSION) > 0) {
                         GM_setValue(LATEST_REMOTE_VERSION_DATA_KEY, remoteVersionData);
                         displayUpdateNotification(remoteVersion, remoteVersionData.update_url || GM_info.script.downloadURL || '#', remoteVersionData.changelog_url || '');
@@ -1019,8 +1042,8 @@ Pay attention to the file paths provided in the context.`;
                 modal.style.display = 'block';
                 if (isModalMinimized) toggleMinimizeModal(); else loadModalPositionAndSize(modal, MODAL_SIZE_KEY, MODAL_POSITION_KEY);
                 if (folderInputLabel) folderInputLabel.textContent = lastSelectedFolderName ? `Последняя папка: ${lastSelectedFolderName}` : 'Папка не выбрана';
-                updateStatus('Modal opened.');
-                checkForUpdates(true); // Force check when modal is opened by user for this debug session
+                updateStatus('Modal opened. Checking for updates...');
+                checkForUpdates(true); // Force check for updates when modal is opened by the user.
             } else { console.error("[Shotgun Prompter] Modal is null or not in DOM."); updateStatus("Error: Could not display modal.", true); }
         });
         if (document.body) document.body.appendChild(btn);
@@ -1087,7 +1110,7 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-modal.minimized .shotgun-modal-header { padding: 10px 15px; margin-bottom: 0; border-bottom: none; cursor: pointer; }
             .shotgun-modal.minimized .shotgun-modal-header h2 { font-size: 1.1em; }
             .shotgun-settings-submodal { z-index: 10001; background-color: transparent; pointer-events: none; }
-            .shotgun-settings-submodal .shotgun-modal-content { pointer-events: auto; }
+            .shotgun-settings-submodal .shotgun-modal-content { pointer-events: auto; resize: none !important; } /* Disabled resize for settings modal content */
             .shotgun-settings-submodal .shotgun-modal-body { flex-direction: column; overflow-y: auto; }
             .shotgun-settings-ignore-tester { display: flex; align-items: center; margin-bottom: 10px; gap: 5px; }
             .shotgun-settings-ignore-tester input { flex-grow: 1; }
