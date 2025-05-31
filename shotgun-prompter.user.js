@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.4.8
+// @version      0.4.9
 // @description  Formulate prompts for AI Studio using local project files, with settings and prompt templates.
 // @author       Your Name (based on Shotgun Code concept)
 // @match        https://aistudio.google.com/*
@@ -10,14 +10,24 @@
 // @grant        GM_getValue
 // @grant        GM_deleteValue
 // @grant        GM_listValues
+// @grant        GM_xmlhttpRequest
+// @grant        GM_info
+// @downloadURL  https://github.com/WhiteBite/Shotgun-Prompter/raw/main/shotgun-prompter.user.js
+// @updateURL    https://github.com/WhiteBite/Shotgun-Prompter/raw/main/shotgun-prompter.user.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // console.log("[Shotgun Prompter] Script execution started (v0.4.8).");
+    // console.log("[Shotgun Prompter] Script execution started (v0.4.9).");
 
+    const SCRIPT_VERSION = GM_info.script.version;
+    const GITHUB_RAW_CONTENT_URL = "https://raw.githubusercontent.com/WhiteBite/Shotgun-Prompter/main/";
+    const VERSION_CHECK_URL = GITHUB_RAW_CONTENT_URL + "latest_version.json";
     const SCRIPT_PREFIX = 'shotgun_prompter_';
+    const LAST_VERSION_CHECK_KEY = SCRIPT_PREFIX + 'last_version_check_timestamp';
+    const CHECK_VERSION_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
     const CUSTOM_PROMPT_TEMPLATES_KEY = SCRIPT_PREFIX + 'prompt_templates';
     const CUSTOM_IGNORE_RULES_KEY = SCRIPT_PREFIX + 'custom_ignore_rules';
     const LAST_FOLDER_NAME_KEY = SCRIPT_PREFIX + 'last_folder_name';
@@ -63,7 +73,7 @@ Pay attention to the file paths provided in the context.`;
 
     let modal, fileInput, fileListDiv, generateContextBtn, contextTextarea,
         userTaskTextarea, finalPromptTextarea, promptTemplateSelect,
-        copyContextBtn, copyPromptBtn, statusDiv,
+        copyContextBtn, copyPromptBtn, statusDiv, versionStatusDiv,
         minimizeBtn, modalHeaderTitle, statsDiv, contextStatsDiv, promptStatsDiv,
         folderInputLabel, settingsBtn, settingsModal,
         leftPanelElement, rightPanelElement, panelResizerElement,
@@ -76,11 +86,20 @@ Pay attention to the file paths provided in the context.`;
     let scriptInitialized = false;
 
     function logHelper(message) { console.log(`[Shotgun Prompter] ${message}`); }
-    function updateStatus(message, isError = false) {
-        if (statusDiv) {
-            statusDiv.textContent = message;
-            statusDiv.style.color = isError ? 'red' : (message.includes("Generating") || message.includes("Processing") ? 'orange' : 'green');
+    function updateStatus(message, isError = false, isVersionCheck = false) {
+        const targetDiv = isVersionCheck ? versionStatusDiv : statusDiv;
+        if (targetDiv) {
+            if (isVersionCheck && !isError && message.includes("<a")) { // Check if message is HTML for link
+                 targetDiv.innerHTML = message;
+                 targetDiv.style.color = 'blue';
+                 targetDiv.style.cursor = 'pointer'; // Make it look clickable
+            } else {
+                targetDiv.textContent = message;
+                targetDiv.style.color = isError ? 'red' : (message.includes("Generating") || message.includes("Processing") ? 'orange' : 'green');
+                targetDiv.style.cursor = 'default';
+            }
         }
+        // if (!isVersionCheck) logHelper(message); // Avoid logging version checks too often
     }
     function copyToClipboard(text, buttonElement, successMessage = "Copied!") {
         if (!text) return;
@@ -191,20 +210,16 @@ Pay attention to the file paths provided in the context.`;
     }
 
     function findNodeInTree(treeObject, pathArray) {
-        let currentLevelNode = null; // Will hold the actual node, not its _children
-        let currentSubTree = treeObject; // Start with the root of the tree
-
+        let currentLevelNode = null;
+        let currentSubTree = treeObject;
         for (const part of pathArray) {
             if (currentSubTree && currentSubTree[part]) {
-                currentLevelNode = currentSubTree[part]; // This is the node for 'part'
-                currentSubTree = currentLevelNode._children; // Next iteration looks into this node's children
-            } else {
-                return null; // Path does not exist
-            }
+                currentLevelNode = currentSubTree[part];
+                currentSubTree = currentLevelNode._children;
+            } else { return null; }
         }
-        return currentLevelNode; // Return the node at the end of the path
+        return currentLevelNode;
     }
-
 
     function buildDisplayTreeAndSetExclusion(files) {
         const newTree = {};
@@ -260,9 +275,7 @@ Pay attention to the file paths provided in the context.`;
                 else { allChildrenExcluded = false; noChildrenExcluded = true; }
                 checkbox.checked = !allChildrenExcluded; checkbox.indeterminate = !allChildrenExcluded && !noChildrenExcluded; item._excluded = allChildrenExcluded;
             } else { checkbox.checked = !item._excluded; }
-            checkbox.addEventListener('change', () => {
-                const isChecked = checkbox.checked; setChildrenChecked(item, isChecked);
-            });
+            checkbox.addEventListener('change', () => { const isChecked = checkbox.checked; setChildrenChecked(item, isChecked); });
             entryDiv.appendChild(checkbox); const iconSpan = document.createElement('span'); iconSpan.className = 'shotgun-tree-icon';
             if (item._isDir) {
                 const expander = createElementWithProps('span', { class: 'shotgun-tree-expander', textContent: item._expanded ? '▼ ' : '▶ ' });
@@ -423,7 +436,9 @@ Pay attention to the file paths provided in the context.`;
         contextTextarea = document.getElementById('shotgun-context-textarea-el'); copyContextBtn = document.getElementById('shotgun-copy-context-btn-el');
         userTaskTextarea = document.getElementById('shotgun-user-task-el'); promptTemplateSelect = document.getElementById('shotgun-prompt-template-select-el');
         finalPromptTextarea = document.getElementById('shotgun-final-prompt-el'); copyPromptBtn = document.getElementById('shotgun-copy-prompt-btn-el');
-        statusDiv = modal.querySelector('.shotgun-status'); minimizeBtn = modal.querySelector('.shotgun-minimize-btn');
+        statusDiv = modal.querySelector('.shotgun-status');
+        versionStatusDiv = modal.querySelector('.shotgun-version-status');
+        minimizeBtn = modal.querySelector('.shotgun-minimize-btn');
         modalHeaderTitle = modal.querySelector('.shotgun-modal-header h2'); settingsBtn = modal.querySelector('.shotgun-settings-btn');
         statsDiv = document.getElementById('shotgun-stats-el'); contextStatsDiv = document.getElementById('shotgun-context-stats-el'); promptStatsDiv = document.getElementById('shotgun-prompt-stats-el');
         settingsModal = document.getElementById('shotgun-settings-modal');
@@ -499,7 +514,6 @@ Pay attention to the file paths provided in the context.`;
         const fileInputTriggerBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Выбор папки' }); fileInputTriggerBtn.addEventListener('click', () => fileInput.click());
         folderInputLabel = createElementWithProps('span', { id: 'shotgun-folder-input-label-el', style: 'margin-left: 10px; font-size: 0.85em; color: #5f6368;' }); folderInputLabel.textContent = lastSelectedFolderName ? `Последняя папка: ${lastSelectedFolderName}` : 'Папка не выбрана';
         fileInputContainer.appendChild(fileInputTriggerBtn); fileInputContainer.appendChild(fileInput); fileInputContainer.appendChild(folderInputLabel); leftPanelElement.appendChild(fileInputContainer);
-
         const fileListHeader = createElementWithProps('div', { class: 'shotgun-file-list-header' });
         fileListHeader.appendChild(createElementWithProps('h4', { textContent: 'Selected Files:' }));
         const fileListControls = createElementWithProps('div', {class: 'shotgun-file-list-controls'});
@@ -514,7 +528,6 @@ Pay attention to the file paths provided in the context.`;
         fileListControls.append(expandAllBtn, collapseAllBtn, selectAllBtn, deselectAllBtn);
         fileListHeader.appendChild(fileListControls);
         leftPanelElement.appendChild(fileListHeader);
-
         statsDiv = createElementWithProps('div', { id: 'shotgun-stats-el', class: 'shotgun-stats-text' }); leftPanelElement.appendChild(statsDiv);
         fileListDiv = createElementWithProps('div', { id: 'shotgun-file-list-el', class: 'shotgun-file-list' }); leftPanelElement.appendChild(fileListDiv);
         generateContextBtn = createElementWithProps('button', { id: 'shotgun-generate-context-btn-el', class: 'shotgun-button', textContent: 'Generate Context', disabled: '' }); leftPanelElement.appendChild(generateContextBtn);
@@ -535,11 +548,15 @@ Pay attention to the file paths provided in the context.`;
         copyPromptBtn = createElementWithProps('button', { id: 'shotgun-copy-prompt-btn-el', class: 'shotgun-button', textContent: 'Copy Final Prompt', disabled: '' }); rightPanelElement.appendChild(copyPromptBtn);
         modalBody.appendChild(leftPanelElement); modalBody.appendChild(panelResizerElement); modalBody.appendChild(rightPanelElement);
         const modalFooter = createElementWithProps('div', { class: 'shotgun-modal-footer' });
-        statusDiv = createElementWithProps('div', { class: 'shotgun-status', textContent: 'Ready.' }); modalFooter.appendChild(statusDiv);
+        statusDiv = createElementWithProps('div', { class: 'shotgun-status', textContent: 'Ready.' });
+        versionStatusDiv = createElementWithProps('div', { class: 'shotgun-version-status'}); // Version status div
+        modalFooter.appendChild(versionStatusDiv); // Add version status first
+        modalFooter.appendChild(statusDiv);      // Then regular status
         modalContent.appendChild(modalHeader); modalContent.appendChild(modalBody); modalContent.appendChild(modalFooter);
         modal.appendChild(modalContent);
         if (document.body) document.body.appendChild(modal); else { console.error("[Shotgun Prompter] document.body not available."); return; }
         assignUIElements(); loadElementHeights(); addResizeListeners(); renderFileList(); updateStats(); populatePromptTemplateSelect(); updateFinalPrompt();
+        checkForUpdates(); // Check for updates when modal is created/shown
         if (fileInput) fileInput.addEventListener('change', handleFileSelection);
         if (generateContextBtn) generateContextBtn.addEventListener('click', generateContext);
         if (copyContextBtn) copyContextBtn.addEventListener('click', () => copyToClipboard(contextTextarea.value, copyContextBtn));
@@ -745,17 +762,19 @@ Pay attention to the file paths provided in the context.`;
         const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template' }); saveTemplateBtn.addEventListener('click', handleSaveTemplate); templateButtonsDiv.appendChild(saveTemplateBtn);
         const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '' }); deleteTemplateBtn.addEventListener('click', handleDeleteTemplate); templateButtonsDiv.appendChild(deleteTemplateBtn);
         templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection);
+
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
-        const ieGrid = createElementWithProps('div', { class: 'shotgun-settings-grid', style: 'grid-template-columns: 1fr 1fr;'});
+        const ieDiv = createElementWithProps('div', { class: 'shotgun-settings-import-export' }); // Changed from grid to simple div
         const exportBtn = createElementWithProps('button', {class: 'shotgun-button', textContent: 'Export Settings'});
         exportBtn.onclick = exportSettings;
-        ieGrid.appendChild(exportBtn);
-        const importLabel = createElementWithProps('label', {class: 'shotgun-button', textContent: 'Import Settings', for: 'shotgun-import-settings-input'});
+        ieDiv.appendChild(exportBtn);
+        const importLabel = createElementWithProps('label', {class: 'shotgun-button', textContent: 'Import Settings', for: 'shotgun-import-settings-input', style: 'margin-left: 10px;'}); // Added margin
         const importInput = createElementWithProps('input', {type: 'file', id: 'shotgun-import-settings-input', accept: '.json', style: 'display: none;'});
         importInput.onchange = importSettings;
-        ieGrid.appendChild(importLabel);
-        ieGrid.appendChild(importInput);
-        modalBody.appendChild(ieGrid);
+        ieDiv.appendChild(importLabel);
+        ieDiv.appendChild(importInput);
+        modalBody.appendChild(ieDiv);
+
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'General' }));
         const resetAllBtn = createElementWithProps('button', { class: 'shotgun-button shotgun-button-danger', textContent: 'Reset All Prompter Settings' }); resetAllBtn.addEventListener('click', handleResetAllSettings); modalBody.appendChild(resetAllBtn);
         const modalFooter = createElementWithProps('div', { class: 'shotgun-modal-footer' });
@@ -782,6 +801,47 @@ Pay attention to the file paths provided in the context.`;
         loadModalPositionAndSize(settingsModal, SETTINGS_MODAL_SIZE_KEY, null, '70%', '75vh');
     }
 
+    function checkForUpdates() {
+        const lastCheck = GM_getValue(LAST_VERSION_CHECK_KEY, 0);
+        if (Date.now() - lastCheck < CHECK_VERSION_INTERVAL) {
+            // logHelper("Version check interval not yet passed.");
+            return;
+        }
+
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: VERSION_CHECK_URL + "?t=" + Date.now(), // Cache buster
+            onload: function(response) {
+                GM_setValue(LAST_VERSION_CHECK_KEY, Date.now());
+                try {
+                    const remoteVersionData = JSON.parse(response.responseText);
+                    const remoteVersion = remoteVersionData.version;
+                    if (remoteVersion && remoteVersion > SCRIPT_VERSION) {
+                        const updateUrl = remoteVersionData.update_url || GM_info.script.downloadURL || '#';
+                        const changelogUrl = remoteVersionData.changelog_url || '';
+                        let message = `New version ${remoteVersion} available! <a href="${updateUrl}" target="_blank" style="color: white; text-decoration: underline;">Update now</a>.`;
+                        if (changelogUrl) {
+                            message += ` <a href="${changelogUrl}" target="_blank" style="color: white; text-decoration: underline;">View Changelog</a>.`;
+                        }
+                        updateStatus(message, false, true);
+                    } else {
+                        // updateStatus("Script is up to date.", false, true); // Optional: notify user they are up to date
+                        if (versionStatusDiv) versionStatusDiv.textContent = ''; // Clear if up-to-date
+                    }
+                } catch (e) {
+                    console.error("[Shotgun Prompter] Error parsing version data:", e);
+                    updateStatus("Error checking for updates (parse error).", true, true);
+                }
+            },
+            onerror: function(response) {
+                GM_setValue(LAST_VERSION_CHECK_KEY, Date.now()); // Still update timestamp to avoid spamming on network errors
+                console.error("[Shotgun Prompter] Error fetching version data:", response);
+                updateStatus("Error checking for updates (network error).", true, true);
+            }
+        });
+    }
+
+
     function injectMainButton() {
         if (document.getElementById('shotgun-prompter-btn')) return;
         const btn = document.createElement('button'); btn.id = 'shotgun-prompter-btn'; btn.textContent = 'Shotgun Prompter';
@@ -793,6 +853,7 @@ Pay attention to the file paths provided in the context.`;
                 if (isModalMinimized) toggleMinimizeModal(); else loadModalPositionAndSize(modal, MODAL_SIZE_KEY, MODAL_POSITION_KEY);
                 if (folderInputLabel) folderInputLabel.textContent = lastSelectedFolderName ? `Последняя папка: ${lastSelectedFolderName}` : 'Папка не выбрана';
                 updateStatus('Modal opened.');
+                checkForUpdates(); // Check for updates when modal is opened by user
             } else { console.error("[Shotgun Prompter] Modal is null or not in DOM."); updateStatus("Error: Could not display modal.", true); }
         });
         if (document.body) document.body.appendChild(btn);
@@ -823,8 +884,8 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-panel h4 { margin-top: 12px; margin-bottom: 6px; font-size: 0.9em; color: #5f6368; font-weight: 500; flex-shrink: 0;}
             .shotgun-textarea, .shotgun-input, .shotgun-select { width: calc(100% - 16px); padding: 7px; margin-bottom: 8px; border: 1px solid #dadce0; border-radius: 4px; font-family: 'Roboto Mono', monospace; font-size: 0.8em; background-color: #fff; flex-shrink: 0; }
             .shotgun-textarea { resize: vertical; overflow-y: auto; }
-            .shotgun-select { font-family: 'Google Sans', Roboto, Arial, sans-serif; font-size: 0.85em; padding: 8px 7px; color: #000; background-color: #fff; /* Explicit select colors */ }
-            select.shotgun-select option { background-color: #fff; color: #000; } /* Explicit option colors */
+            .shotgun-select { font-family: 'Google Sans', Roboto, Arial, sans-serif; font-size: 0.85em; padding: 8px 7px; color: #000; background-color: #fff; }
+            select.shotgun-select option { background-color: #fff; color: #000; }
             #shotgun-context-textarea-el, #shotgun-final-prompt-el { flex-grow: 1; }
             .shotgun-textarea:focus, .shotgun-input:focus, .shotgun-select:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8; }
             .shotgun-file-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
@@ -848,8 +909,10 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-button:hover { background-color: #1765cc; }
             .shotgun-button:disabled { background-color: #f1f3f4; color: #9aa0a6; cursor: not-allowed; }
             .shotgun-button-danger { background-color: #d93025; } .shotgun-button-danger:hover { background-color: #c5221f; }
-            .shotgun-status { margin-top: 0; font-size: 0.85em; color: #5f6368; }
-            .shotgun-modal-footer { border-top: 1px solid #e8eaed; padding: 12px 20px; margin-top: 0; text-align: right; flex-shrink: 0; }
+            .shotgun-modal-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e8eaed; padding: 10px 20px; margin-top: 0; flex-shrink: 0; }
+            .shotgun-status { font-size: 0.85em; color: #5f6368; text-align: right; flex-grow: 1; }
+            .shotgun-version-status { font-size: 0.8em; color: #5f6368; text-align: left; }
+            .shotgun-version-status a { color: #1a73e8; text-decoration: underline; }
             .shotgun-stats-text { font-size: 0.8em; color: #5f6368; margin-bottom: 4px; flex-shrink: 0; }
             .shotgun-modal.minimized .shotgun-modal-content { position: fixed !important; bottom: 10px !important; left: 10px !important; width: 300px !important; height: 50px !important; padding: 0; overflow: hidden !important; resize: none !important; transform: none !important; }
             .shotgun-modal.minimized .shotgun-modal-body, .shotgun-modal.minimized .shotgun-modal-footer { display: none; }
@@ -863,6 +926,7 @@ Pay attention to the file paths provided in the context.`;
             .shotgun-settings-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; margin-bottom: 15px; }
             .shotgun-settings-grid label:not(.shotgun-button) { justify-self: end; }
             .shotgun-settings-grid .shotgun-button { justify-self: start; }
+            .shotgun-settings-import-export { display: flex; gap: 10px; margin-bottom: 15px; } /* Flex for import/export buttons */
             .shotgun-settings-template-section { display: flex; gap: 15px; margin-bottom: 15px; min-height: 200px; }
             .shotgun-settings-template-list { flex: 1; border: 1px solid #dadce0; border-radius: 4px; padding: 5px; overflow-y: auto; max-height: 250px; }
             .shotgun-settings-list-item { padding: 5px 8px; cursor: pointer; border-radius: 3px; margin-bottom: 3px; font-size: 0.9em; }
@@ -895,13 +959,13 @@ Pay attention to the file paths provided in the context.`;
 
     function runInitialization() {
         if (scriptInitialized) return;
-        if (document.body && typeof GM_addStyle === 'function') {
+        if (document.body && typeof GM_addStyle === 'function' && typeof GM_xmlhttpRequest === 'function' && typeof GM_info === 'object') {
              init();
         } else {
             const onPageLoad = () => {
                 if (scriptInitialized) return;
-                if (typeof GM_addStyle === 'function') init();
-                else console.error("[Shotgun Prompter] GM_addStyle not available on load. Script cannot run.");
+                if (typeof GM_addStyle === 'function' && typeof GM_xmlhttpRequest === 'function' && typeof GM_info === 'object') init();
+                else console.error("[Shotgun Prompter] GM functions not available on load. Script cannot run.");
             };
             if (document.readyState === 'complete') onPageLoad();
             else window.addEventListener('load', onPageLoad, { once: true });
