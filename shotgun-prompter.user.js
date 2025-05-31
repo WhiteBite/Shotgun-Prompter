@@ -673,6 +673,7 @@ Pay attention to the file paths provided in the context.`;
     function clearTemplateEditFields() {
         if (settingsTemplateNameInput && settingsTemplateContentTextarea && settingsTemplateListDiv) {
             settingsSelectedTemplateId = null; settingsTemplateNameInput.value = ''; settingsTemplateContentTextarea.value = '';
+            console.log('[Shotgun Prompter] Cleared template edit fields.');
             settingsTemplateNameInput.disabled = false; settingsTemplateContentTextarea.disabled = false;
             Array.from(settingsTemplateListDiv.children).forEach(child => child.classList.remove('selected'));
             const deleteBtn = document.getElementById('shotgun-settings-delete-template-btn'); if (deleteBtn) deleteBtn.disabled = true; // No template selected, so disable delete
@@ -680,6 +681,7 @@ Pay attention to the file paths provided in the context.`;
     }
     function handleSaveTemplate() {
         const name = settingsTemplateNameInput.value.trim(); const content = settingsTemplateContentTextarea.value;
+        console.log('[Shotgun Prompter] handleSaveTemplate called. Name:', name, 'Selected ID:', settingsSelectedTemplateId);
         if (!name || !content) { updateStatus("Template name and content cannot be empty.", true); return; }
         if (settingsSelectedTemplateId) {
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
@@ -696,6 +698,7 @@ Pay attention to the file paths provided in the context.`;
     }
     function handleDeleteTemplate() {
         if (settingsSelectedTemplateId) {
+            console.log('[Shotgun Prompter] handleDeleteTemplate called for ID:', settingsSelectedTemplateId);
             const template = promptTemplates.find(t => t.id === settingsSelectedTemplateId);
             if (template && (template.isCore || template.isOfficial)) { updateStatus("Core/Official templates cannot be deleted.", true); return; }
             if (template && confirm(`Are you sure you want to delete template "${template.name}"?`)) {
@@ -765,12 +768,14 @@ Pay attention to the file paths provided in the context.`;
 
     function fetchOfficialPromptTemplates() {
         updateStatus("Fetching official prompt templates...", false);
+        console.log('[Shotgun Prompter] fetchOfficialPromptTemplates called.');
         GM_xmlhttpRequest({
             method: "GET",
             url: OFFICIAL_PROMPT_TEMPLATES_URL + "?t=" + Date.now(), // Cache buster
             onload: function(response) {
                 try {
                     const officialTemplates = JSON.parse(response.responseText);
+                    console.log('[Shotgun Prompter] Fetched official templates:', officialTemplates);
                     if (!Array.isArray(officialTemplates)) throw new Error("Invalid format for official templates.");
                     let updatedCount = 0; let newCount = 0;
                     officialTemplates.forEach(officialTpl => {
@@ -852,10 +857,29 @@ Pay attention to the file paths provided in the context.`;
         settingsTemplateContentTextarea = createElementWithProps('textarea', { id: 'shotgun-settings-template-content', class: 'shotgun-textarea', style: 'height: 150px; resize: vertical;' }); templateEditDiv.appendChild(settingsTemplateContentTextarea);
         const templateButtonsDiv = createElementWithProps('div', { class: 'shotgun-settings-template-buttons' });
         const newTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'New Template' }); newTemplateBtn.addEventListener('click', clearTemplateEditFields); templateButtonsDiv.appendChild(newTemplateBtn);
+        // newTemplateBtn.addEventListener('click', () => {
+        //     console.log('New Template button clicked (direct log)');
+        //     clearTemplateEditFields();
+        // });
+
         const saveTemplateBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Save Template' }); saveTemplateBtn.addEventListener('click', handleSaveTemplate); templateButtonsDiv.appendChild(saveTemplateBtn);
+        // saveTemplateBtn.addEventListener('click', () => {
+        //     console.log('Save Template button clicked (direct log)');
+        //     handleSaveTemplate();
+        // });
+
         const deleteTemplateBtn = createElementWithProps('button', { id: 'shotgun-settings-delete-template-btn', class: 'shotgun-button shotgun-button-danger', textContent: 'Delete Template', disabled: '' }); deleteTemplateBtn.addEventListener('click', handleDeleteTemplate); templateButtonsDiv.appendChild(deleteTemplateBtn);
+        // deleteTemplateBtn.addEventListener('click', () => {
+        //     console.log('Delete Template button clicked (direct log)');
+        //     handleDeleteTemplate();
+        // });
+
         const fetchOfficialBtn = createElementWithProps('button', { class: 'shotgun-button', textContent: 'Fetch Official Templates', title: 'Download or update templates from GitHub' });
         fetchOfficialBtn.addEventListener('click', fetchOfficialPromptTemplates); templateButtonsDiv.appendChild(fetchOfficialBtn);
+        // fetchOfficialBtn.addEventListener('click', () => {
+        //     console.log('Fetch Official Templates button clicked (direct log)');
+        //     fetchOfficialPromptTemplates();
+        // });
         templateEditDiv.appendChild(templateButtonsDiv); templateSection.appendChild(templateEditDiv); modalBody.appendChild(templateSection); 
 
         modalBody.appendChild(createElementWithProps('h3', { textContent: 'Import/Export Settings' }));
@@ -896,13 +920,30 @@ Pay attention to the file paths provided in the context.`;
         loadModalPositionAndSize(settingsModal, SETTINGS_MODAL_SIZE_KEY, null, '70%', '75vh');
     }
 
+    function compareVersions(v1, v2) {
+        if (typeof v1 !== 'string' || typeof v2 !== 'string') return 0; // Or handle error
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+        const len = Math.max(parts1.length, parts2.length);
+        for (let i = 0; i < len; i++) {
+            const n1 = parts1[i] || 0;
+            const n2 = parts2[i] || 0;
+            if (n1 > n2) return 1;
+            if (n1 < n2) return -1;
+        }
+        return 0;
+    }
+
     function checkForUpdates() {
         const lastCheck = GM_getValue(LAST_VERSION_CHECK_KEY, 0);
-        if (Date.now() - lastCheck < CHECK_VERSION_INTERVAL) {
-            // logHelper("Version check interval not yet passed.");
+        const timeSinceLastCheck = Date.now() - lastCheck;
+        console.log(`[Shotgun Prompter] checkForUpdates: SCRIPT_VERSION=${SCRIPT_VERSION}. Last check: ${new Date(lastCheck).toLocaleString()}. Time since: ${timeSinceLastCheck/1000}s. Interval: ${CHECK_VERSION_INTERVAL/1000}s`);
+
+        if (timeSinceLastCheck < CHECK_VERSION_INTERVAL) {
+            console.log("[Shotgun Prompter] Version check interval not yet passed.");
             return;
         }
-
+        console.log("[Shotgun Prompter] Proceeding with version check API call.");
         GM_xmlhttpRequest({
             method: "GET",
             url: VERSION_CHECK_URL + "?t=" + Date.now(), // Cache buster
@@ -911,7 +952,8 @@ Pay attention to the file paths provided in the context.`;
                 try {
                     const remoteVersionData = JSON.parse(response.responseText);
                     const remoteVersion = remoteVersionData.version;
-                    if (remoteVersion && remoteVersion > SCRIPT_VERSION) {
+                    console.log(`[Shotgun Prompter] Remote version: ${remoteVersion}, Local version: ${SCRIPT_VERSION}`);
+                    if (remoteVersion && compareVersions(remoteVersion, SCRIPT_VERSION) > 0) {
                         const updateUrl = remoteVersionData.update_url || GM_info.script.downloadURL || '#';
                         const changelogUrl = remoteVersionData.changelog_url || '';
 
@@ -930,15 +972,17 @@ Pay attention to the file paths provided in the context.`;
                         }
                         updateStatus(fragment, false, true);
                     } else {
-                        // updateStatus("Script is up to date.", false, true); // Optional: notify user they are up to date
+                        console.log("[Shotgun Prompter] Script is up to date or remote version is not newer.");
                         if (versionStatusDiv) versionStatusDiv.textContent = ''; // Clear if up-to-date
                     }
                 } catch (e) {
                     console.error("[Shotgun Prompter] Error parsing version data:", e);
+                    if (versionStatusDiv) versionStatusDiv.textContent = '';
                     updateStatus("Error checking for updates (parse error).", true, true);
                 }
             },
             onerror: function(response) {
+                if (versionStatusDiv) versionStatusDiv.textContent = '';
                 GM_setValue(LAST_VERSION_CHECK_KEY, Date.now()); // Still update timestamp to avoid spamming on network errors
                 console.error("[Shotgun Prompter] Error fetching version data:", response);
                 updateStatus("Error checking for updates (network error).", true, true);
