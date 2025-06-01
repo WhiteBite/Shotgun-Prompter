@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         AI Studio Shotgun Prompter
 // @namespace    http://tampermonkey.net/
-// @version      0.9.9
-// @description  Formulate prompts for AI Studio. Fixes checkbox tree logic and prompt template display.
-// @author       Your Name (based on Shotgun Code concept)
+// @version      1.0.0
+// @description  Formulate prompts for AI Studio. Fixes checkbox tree logic and prompt template display. Adds full localization.
+// @author       WhiteBite
 // @match        https://aistudio.google.com/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -26,6 +26,68 @@
   const SCRIPT_PREFIX = 'shotgun_prompter_';
   const OFFICIAL_PROMPT_TEMPLATES_URL = GITHUB_RAW_CONTENT_URL
       + "prompt_templates.json";
+
+  const DEFAULT_PROMPT_TEMPLATES = [
+    {
+      id: SCRIPT_PREFIX + 'tpl_default_code_gen',
+      name: "Default Code Generation",
+      content: "You are an AI assistant specializing in software development. Your task is to help with code generation, debugging, and explaining programming concepts based on the provided project context. Use the context to understand the project structure and existing code.\n\nWhen providing code, ensure it is complete, correct, and includes necessary imports or setup.\nFocus on the user's specific task.\n\nDo not include introductory or concluding remarks unless explicitly requested. Provide only the code or explanation needed.\n\n",
+      isCore: true,
+      isOfficial: false
+    },
+    {
+      id: SCRIPT_PREFIX + 'tpl_default_explainer',
+      name: "Default Explainer",
+      content: "You are an AI assistant specializing in explaining code and project structures. Analyze the provided project context and explain the requested parts or concepts clearly and concisely. Focus on the user's specific task.\n\nDo not include introductory or concluding remarks unless explicitly requested.\n\n",
+      isCore: true,
+      isOfficial: false
+    },
+     {
+      id: SCRIPT_PREFIX + 'tpl_default_code_reviewer',
+      name: "Default Code Reviewer",
+      content: "You are an AI assistant specializing in code review. Analyze the provided project context and the user's task (which may involve a code change or new code) and provide constructive feedback. Point out potential bugs, suggest improvements for clarity, efficiency, and adherence to best practices. Focus on the user's specific task and the relevant parts of the context.\n\nDo not include introductory or concluding remarks unless explicitly requested.\n\n",
+      isCore: true,
+      isOfficial: false
+    }
+  ];
+
+  const DEFAULT_IGNORE_RULES = `# Default ignore rules (like .gitignore)
+# Ignore common build/dependency directories
+node_modules/
+dist/
+build/
+.gradle/
+target/
+
+# Ignore common IDE/OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+*.log
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+
+# Ignore lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Ignore sensitive files (example)
+.env
+.env.*
+config.local.js
+
+# You can add your own rules here.
+# Use # for comments.
+# Use ! to negate a rule (e.g., !src/always_include_file.js).
+# See gitignore documentation for full syntax.
+`;
+
   const LAST_VERSION_CHECK_KEY = SCRIPT_PREFIX + 'last_version_check_timestamp';
   const CHECK_VERSION_INTERVAL = 24 * 60 * 60 * 1000;
   const LATEST_REMOTE_VERSION_DATA_KEY = SCRIPT_PREFIX
@@ -76,23 +138,6 @@
   const BYTES_PER_TOKEN_ESTIMATE = 4;
   const MAX_TOTAL_SIZE_BYTES_FOR_AUTO_GENERATE = MAX_TOKENS_FOR_AUTO_GENERATE
       * BYTES_PER_TOKEN_ESTIMATE;
-  const DEFAULT_PROMPT_TEMPLATE_CONTENT = `Your primary goal is to generate a git diff.
-Follow the user's instructions carefully.
-Output ONLY the git diff, no explanations, no apologies, no extra text.
-Ensure the diff is in the standard git format.
-If you need to create a new file, use /dev/null as the source for the diff.
-If you need to delete a file, use /dev/null as the destination for the diff.
-Pay attention to the file paths provided in the context.`;
-
-  const DEFAULT_PROMPT_TEMPLATES = [
-    {
-      id: 'default_git_diff_template',
-      name: 'Default Git Diff',
-      content: DEFAULT_PROMPT_TEMPLATE_CONTENT,
-      isCore: true
-    }
-  ];
-  const DEFAULT_IGNORE_RULES = `# Enter patterns one per line.\n# Examples:\n# node_modules/  (ignore 'node_modules' directory in any subdir)\n# /build/        (ignore 'build' directory only at the root)\n# *.log          (ignore all files ending with .log)\n# !important.log (do NOT ignore important.log)`;
   const PROMPT_TEMPLATE_BASE = `CURRENT_DATE: 2025-05-31\n\nTASK:\n{USER_TASK}\n\nRULES:\n{PROMPT_RULES_CONTENT}\n\nPROJECT_CONTEXT:\n{GENERATED_CONTEXT}\n`;
 
   let projectFiles = [];
@@ -203,8 +248,8 @@ Pay attention to the file paths provided in the context.`;
             "Warning: Folder structure might not be fully preserved (no webkitRelativePath).",
         noFilesSelected: "No files selected.",
         fileSelectionEventError: "File selection event error.",
-        fileApiNotSupported:
-            "File System Access API is not supported in this browser. Please use the standard 'Выбор папки' button.",
+        apiNotSupported:
+            "File System Access API is not supported in this browser. Please use the standard 'Select Folder' button.",
         apiFolderSelectCanceled: "Folder selection canceled by user.",
         apiFolderSelectError: "Error selecting folder with API. See console.",
         folderApiProcessed: "Folder processed via API. %1 objects found.",
@@ -217,7 +262,7 @@ Pay attention to the file paths provided in the context.`;
         gitignoreNotFound: ".gitignore found (API), but auto-load is disabled in Settings.",
         legacyGitignoreLoaded: ".gitignore loaded (legacy).",
         legacyGitignoreLoadError: "Error reading .gitignore (legacy).",
-        gitignoreFoundLegacy: ".gitignore found, but auto-load is disabled in Settings.",
+        gitignoreFoundLegacy: ".gitignore found (legacy), but auto-load is disabled in Settings.",
         noFilesToStructure: "No files to structure.",
         filesToInclude: "Files to include:",
         context: "Context:",
@@ -294,7 +339,19 @@ Pay attention to the file paths provided in the context.`;
         medium: "Medium",
         large: "Large",
         custom: "Custom:",
-        resetHeight: "Reset height"
+        resetHeight: "Reset height",
+        languageAndAppearance: "Language & Appearance",
+        selectFolderLegacy: "Select Folder (Legacy)",
+        selectFolderApi: "Select Folder (API)",
+        apiSupportedTooltip: "Uses File System Access API for better performance",
+        refreshApi: "Refresh API Folder",
+        searchFilesPlaceholder: "Search files...",
+        ignoreRulesDetails: "Ignore Rule Details",
+        ready: "Ready",
+        checkExclusionsAndGenerateContext: "Check exclusions and Generate Context.",
+        readingFolder: "Reading folder...",
+        processing: "Processing",
+        noFilesSelectedForContext: "No files selected for context generation."
       }
     },
     ru: {
@@ -470,18 +527,40 @@ Pay attention to the file paths provided in the context.`;
         medium: "Средний",
         large: "Большой",
         custom: "Произвольный:",
-        resetHeight: "Сбросить высоту"
+        resetHeight: "Сбросить высоту",
+        languageAndAppearance: "Язык и Внешний Вид",
+        selectFolderLegacy: "Выбрать Папку (Legacy)",
+        selectFolderApi: "Выбрать Папку (API)",
+        apiSupportedTooltip: "Использует File System Access API для лучшей производительности",
+        refreshApi: "Обновить Папку (API)",
+        searchFilesPlaceholder: "Поиск файлов...",
+        ignoreRulesDetails: "Детали Правил Игнорирования",
+        ready: "Готово",
+        checkExclusionsAndGenerateContext: "Проверьте исключения и Сгенерируйте Контекст.",
+        readingFolder: "Чтение папки...",
+        processing: "Обработка",
+        noFilesSelectedForContext: "Не выбраны файлы для генерации контекста."
       }
     }
   };
+  let fetchedLanguages = {};
+  const LOCALE_FILE_PATTERN = "locale/%1.json";
 
   let currentLang = GM_getValue(CURRENT_LANG_KEY, 'ru');
 
+  function getCombinedLanguages() {
+    const combined = {};
+    return Object.assign(combined, LANGUAGES, fetchedLanguages);
+  }
+
   function getText(key, ...args) {
-    const lang = LANGUAGES[currentLang] || LANGUAGES['ru'];
+    const lang = getCombinedLanguages()[currentLang] || LANGUAGES['ru'];
     let text = lang.texts[key] || LANGUAGES['ru'].texts[key] || key;
     args.forEach((arg, index) => {
-      text = text.replace(`%${index + 1}`, arg);
+      const placeholder = `%${index + 1}`;
+      if (text.includes(placeholder)) {
+        text = text.split(placeholder).join(arg);
+      }
     });
     return text;
   }
@@ -744,129 +823,6 @@ Pay attention to the file paths provided in the context.`;
     updateStats();
   }
 
-  async function handleLegacyFileSelection(event) {
-    if (!event || !event.target || !event.target.files) {
-      updateStatus(getText("fileSelectionEventError"), true);
-      return;
-    }
-    const files = event.target.files;
-    if (files.length === 0) {
-      updateStatus(getText("noFilesSelected"));
-      projectFiles = [];
-      displayTreeRoot = {};
-      renderFileList();
-      if (generateContextBtn) {
-        generateContextBtn.disabled = true;
-      }
-      return;
-    }
-    let hasWebkitRelativePath = false;
-    let tempProjectRootName = "";
-    projectFiles = Array.from(files).map((file, index) => {
-      const relPath = file.webkitRelativePath || file.name;
-      if (index === 0
-          && file.webkitRelativePath) {
-        tempProjectRootName = file.webkitRelativePath.split(
-            '/')[0];
-      }
-      if (file.webkitRelativePath) {
-        hasWebkitRelativePath = true;
-      }
-      return {
-        file,
-        relPath,
-        excluded: false,
-        content: null,
-        id: SCRIPT_PREFIX + 'pf_' + Date.now() + '_' + index
-      };
-    });
-    if (tempProjectRootName) {
-      lastSelectedFolderName = tempProjectRootName;
-      GM_setValue(LAST_FOLDER_NAME_KEY, lastSelectedFolderName);
-      if (folderInputLabel) {
-        folderInputLabel.textContent = `${getText("folderSelected")} ${lastSelectedFolderName} (${files.length} ${getText("files")})`;
-      }
-    } else if (folderInputLabel) {
-      folderInputLabel.textContent = `${getText("filesSelected")} ${files.length} (${getText("folderStructureWarning")})`;
-    }
-    currentDirectoryHandle = null;
-    apiFolderSelected = false;
-    if (refreshApiFolderBtn) {
-      refreshApiFolderBtn.style.display = 'none';
-    }
-
-    projectFiles.sort((a, b) => a.relPath.localeCompare(b.relPath));
-
-    let commonPrefixForGitignore = "";
-    if (projectFiles.length > 0 && projectFiles[0].relPath.includes('/')) {
-      commonPrefixForGitignore = projectFiles[0].relPath.substring(0,
-          projectFiles[0].relPath.indexOf('/') + 1);
-      if (!projectFiles.every(
-          pf => pf.relPath.startsWith(commonPrefixForGitignore)
-              || !pf.relPath.includes('/'))) {
-        commonPrefixForGitignore = "";
-      }
-    }
-
-    const autoLoadGitignoreSetting = GM_getValue(AUTO_LOAD_GITIGNORE_KEY, true);
-    const gitignoreExpectedPath = commonPrefixForGitignore + ".gitignore";
-    const gitignoreFileEntry = projectFiles.find(
-        pf => pf.relPath === gitignoreExpectedPath);
-
-    if (autoLoadGitignoreSetting) {
-      if (gitignoreFileEntry && gitignoreFileEntry.file) {
-        try {
-          const gitignoreContent = await gitignoreFileEntry.file.text();
-          GM_setValue(SCRIPT_PREFIX + 'loaded_gitignore_rules',
-              gitignoreContent);
-          updateStatus(getText("legacyGitignoreLoaded"), false);
-        } catch (e) {
-          console.warn(
-              `[Shotgun Prompter] ${getText("legacyGitignoreLoadError")}`,
-              e);
-          GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
-          updateStatus(getText("legacyGitignoreLoadError"), true);
-        }
-      } else {
-        GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
-
-      }
-    } else {
-      GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
-      if (gitignoreFileEntry) {
-        updateStatus(
-            getText("gitignoreFoundLegacy"),
-            false);
-      }
-    }
-
-    if (!hasWebkitRelativePath && files.length > 0) {
-      updateStatus(
-          getText("noWebkitRelativePathWarning"),
-          false);
-    }
-
-    updateFileSelectionUI();
-
-    if (contextTextarea) {
-      contextTextarea.value = '';
-    }
-    generatedContext = '';
-    if (finalPromptTextarea) {
-      finalPromptTextarea.value = '';
-    }
-    updateCopyButtonStates();
-    updateStatus(
-        `${projectFiles.length} ${getText("files")}/${getText("folderNotSelected")} ${getText("filesSelected")}. ${getText("contextGenerated", projectFiles.length)}. ${getText("contextAutoUpdated")}`);
-    updateStatus(`${projectFiles.length} ${getText("files")}/${getText("objects")} ${getText("filesSelected")}. ${getText("checkExclusionsAndGenerate")}`);
-    updateStatus(`${projectFiles.length} ${getText("files")}/${getText("objects")} ${getText("found")}. ${getText("checkExclusionsAndGenerateContext")}`);
-
-    updateStats();
-    updateLoadedGitignoreDisplay();
-    await checkSizeAndAutoGenerateContext();
-    persistCurrentExpansionState(displayTreeRoot);
-  }
-
   async function readDirectoryRecursiveAPI(dirHandle, currentPath = "") {
     const filesInThisDir = [];
     for await (const entry of dirHandle.values()) {
@@ -996,7 +952,6 @@ Pay attention to the file paths provided in the context.`;
             getText("gitignoreNotFound"),
             false);
       } catch (e) {
-        // Пропущено тело блока catch. Добавляем пустое.
       }
     }
 
@@ -1067,6 +1022,183 @@ Pay attention to the file paths provided in the context.`;
         refreshApiFolderBtn.style.display = 'none';
       }
     }
+  }
+
+  // New global variable to store dropped files/folders
+  let droppedFilesAndFolders = [];
+
+  // Helper to get File object from FileSystemFileEntry
+  async function readEntryFile(fileEntry) {
+      return new Promise((resolve, reject) => fileEntry.file(resolve, reject));
+  }
+
+  // Recursive function to process dropped entries (files or directories)
+  async function processDroppedEntry(entry, currentPath = '') {
+      if (entry.isFile) {
+          try {
+              const file = await readEntryFile(entry);
+              droppedFilesAndFolders.push({
+                  file,
+                  relPath: currentPath + entry.name,
+                  excluded: false,
+                  isRuleExcluded: false,
+                  content: null,
+                  id: SCRIPT_PREFIX + 'pf_drop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+              });
+          } catch (e) {
+              console.error(`[Shotgun Prompter] Error getting file from dropped entry ${currentPath}${entry.name}:`, e);
+              if (fileReadErrorsDiv) {
+                  const errorP = createElementWithProps('p', { textContent: `${getText("errorAccessingFile", currentPath + entry.name, e.message)}` });
+                  fileReadErrorsDiv.appendChild(errorP);
+                  fileReadErrorsDiv.style.display = 'block';
+              }
+          }
+      } else if (entry.isDirectory) {
+          const dirReader = entry.createReader();
+          const entries = await new Promise(resolve => dirReader.readEntries(resolve));
+          for (const subEntry of entries) {
+              await processDroppedEntry(subEntry, currentPath + entry.name + '/');
+          }
+      }
+  }
+
+  async function handleDrop(event) {
+      event.preventDefault();
+      leftPanelElement.classList.remove('drag-over');
+
+      if (fileReadErrorsDiv) {
+          while (fileReadErrorsDiv.firstChild) {
+              fileReadErrorsDiv.removeChild(fileReadErrorsDiv.firstChild);
+          }
+          fileReadErrorsDiv.style.display = 'none';
+      }
+
+      droppedFilesAndFolders = [];
+      let hasFolderDropped = false;
+      let firstDroppedFolderName = "";
+
+      if (event.dataTransfer.items) {
+          const items = Array.from(event.dataTransfer.items);
+          for (const item of items) {
+              if (item.kind === 'file') {
+                  const entry = item.webkitGetAsEntry(); // This is the key for folder drag-and-drop
+                  if (entry) {
+                      if (entry.isDirectory) {
+                          hasFolderDropped = true;
+                          if (!firstDroppedFolderName) {
+                              firstDroppedFolderName = entry.name;
+                          }
+                      }
+                      await processDroppedEntry(entry);
+                  } else {
+                      // Fallback for browsers not supporting webkitGetAsEntry for drag-and-drop
+                      const file = item.getAsFile();
+                      if (file) {
+                          droppedFilesAndFolders.push({
+                              file,
+                              relPath: file.name,
+                              excluded: false,
+                              isRuleExcluded: false,
+                              content: null,
+                              id: SCRIPT_PREFIX + 'pf_drop_fallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+                          });
+                      }
+                  }
+              }
+          }
+      } else if (event.dataTransfer.files) {
+          // Fallback for older browsers or when items API is not available
+          Array.from(event.dataTransfer.files).forEach(file => {
+              droppedFilesAndFolders.push({
+                  file,
+                  relPath: file.name,
+                  excluded: false,
+                  isRuleExcluded: false,
+                  content: null,
+                  id: SCRIPT_PREFIX + 'pf_drop_fallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+              });
+          });
+      }
+
+      projectFiles = droppedFilesAndFolders;
+      projectFiles.sort((a, b) => a.relPath.localeCompare(b.relPath));
+
+      // Update lastSelectedFolderName and folderInputLabel based on dropped content
+      if (hasFolderDropped && firstDroppedFolderName) {
+          lastSelectedFolderName = firstDroppedFolderName;
+          GM_setValue(LAST_FOLDER_NAME_KEY, lastSelectedFolderName);
+          if (folderInputLabel) {
+              folderInputLabel.textContent = `${getText("folderSelected")} ${lastSelectedFolderName} (${projectFiles.length} ${getText("objects")})`;
+          }
+      } else if (projectFiles.length > 0) {
+          lastSelectedFolderName = ""; // Clear folder name if only files or mixed
+          GM_setValue(LAST_FOLDER_NAME_KEY, lastSelectedFolderName);
+          if (folderInputLabel) {
+              folderInputLabel.textContent = `${getText("filesSelected")} ${projectFiles.length} (${getText("folderStructureWarning")})`;
+          }
+      } else {
+          lastSelectedFolderName = "";
+          GM_setValue(LAST_FOLDER_NAME_KEY, lastSelectedFolderName);
+          if (folderInputLabel) {
+              folderInputLabel.textContent = getText('folderNotSelected');
+          }
+      }
+
+      currentDirectoryHandle = null; // Dropped items are not from File System Access API
+      apiFolderSelected = false;
+      if (refreshApiFolderBtn) {
+          refreshApiFolderBtn.style.display = 'none';
+      }
+      stopAutoUpdateTimer(); // Stop auto-update if folder changed via drag-drop
+
+      // Handle .gitignore for dropped items (similar to legacy input)
+      const autoLoadGitignoreSetting = GM_getValue(AUTO_LOAD_GITIGNORE_KEY, true);
+      if (autoLoadGitignoreSetting && hasFolderDropped && firstDroppedFolderName) {
+          const gitignoreFileEntry = projectFiles.find(pf => pf.relPath === `${firstDroppedFolderName}/.gitignore`);
+          if (gitignoreFileEntry && gitignoreFileEntry.file) {
+              try {
+                  const gitignoreContent = await gitignoreFileEntry.file.text();
+                  GM_setValue(SCRIPT_PREFIX + 'loaded_gitignore_rules', gitignoreContent);
+                  updateStatus(getText("legacyGitignoreLoaded"), false);
+              } catch (e) {
+                  console.warn(`[Shotgun Prompter] ${getText("legacyGitignoreLoadError")}`, e);
+                  GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
+                  updateStatus(getText("legacyGitignoreLoadError"), true);
+              }
+          } else {
+              GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
+          }
+      } else {
+          GM_deleteValue(SCRIPT_PREFIX + 'loaded_gitignore_rules');
+          if (projectFiles.some(pf => pf.relPath.endsWith('.gitignore'))) {
+              updateStatus(getText("gitignoreFoundLegacy"), false);
+          }
+      }
+
+      updateFileSelectionUI();
+      if (contextTextarea) {
+          contextTextarea.value = '';
+      }
+      generatedContext = '';
+      if (finalPromptTextarea) {
+          finalPromptTextarea.value = '';
+      }
+      updateCopyButtonStates();
+      updateStatus(`${projectFiles.length} ${getText("files")}/${getText("objects")} ${getText("found")}. ${getText("checkExclusionsAndGenerateContext")}`);
+      updateStats();
+      updateLoadedGitignoreDisplay();
+      await checkSizeAndAutoGenerateContext();
+      persistCurrentExpansionState(displayTreeRoot);
+  }
+
+  function handleDragOver(event) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      leftPanelElement.classList.add('drag-over');
+  }
+
+  function handleDragLeave(event) {
+      leftPanelElement.classList.remove('drag-over');
   }
 
   function getPersistedExpansionState() {
@@ -2012,25 +2144,24 @@ Pay attention to the file paths provided in the context.`;
   function onPanelResizeStart(event) {
     event.preventDefault();
     isPanelResizing = true;
-    // Убеждаемся, что leftPanelElement и modal доступны
-    assignUIElements(); // Переприсваиваем элементы на всякий случай
+    assignUIElements();
     if (!leftPanelElement || !modal) {
         console.error('[Shotgun Prompter] Resize start failed: panel or modal element not found.');
         isPanelResizing = false;
         return;
     }
     initialLeftPanelBasis = parseFloat(leftPanelElement.style.flexBasis) || leftPanelElement.offsetWidth;
-    // Используем clientX из события мыши или touches[0] из тач-события
-    initialResizeMouseX = event.clientX || (event.touches ? event.touches[0].clientX : null);
-    if (initialResizeMouseX === null) {
+    clientX = event.clientX || (event.touches ? event.touches[0].clientX : null);
+    if (clientX === null) {
         console.error('[Shotgun Prompter] Resize start failed: clientX not found.');
         isPanelResizing = false;
         return;
     }
+    initialResizeMouseX = clientX;
     document.addEventListener('mousemove', onPanelResizing);
     document.addEventListener('mouseup', onPanelResizeEnd);
-    document.addEventListener('touchmove', onPanelResizing, { passive: false }); // Тач-события
-    document.addEventListener('touchend', onPanelResizeEnd); // Тач-события
+    document.addEventListener('touchmove', onPanelResizing, { passive: false });
+    document.addEventListener('touchend', onPanelResizeEnd);
 
     if (document.body) {
       document.body.classList.add('panel-resizing-active');
@@ -2038,8 +2169,7 @@ Pay attention to the file paths provided in the context.`;
   }
 
   function onPanelResizing(event) {
-    // Используем clientX из события мыши или touches[0] из тач-события
-    const clientX = event.clientX || (event.touches ? event.touches[0].clientX : null);
+    clientX = event.clientX || (event.touches ? event.touches[0].clientX : null);
     if (!isPanelResizing || !leftPanelElement || !modal || clientX === null) {
       return;
     }
@@ -2072,8 +2202,8 @@ Pay attention to the file paths provided in the context.`;
       isPanelResizing = false;
       document.removeEventListener('mousemove', onPanelResizing);
       document.removeEventListener('mouseup', onPanelResizeEnd);
-      document.removeEventListener('touchmove', onPanelResizing, { passive: false }); // Тач-события
-      document.removeEventListener('touchend', onPanelResizeEnd); // Тач-события
+      document.removeEventListener('touchmove', onPanelResizing, { passive: false });
+      document.removeEventListener('touchend', onPanelResizeEnd);
 
       if (document.body) {
         document.body.classList.remove(
@@ -2087,19 +2217,19 @@ Pay attention to the file paths provided in the context.`;
   }
 
   function createModal() {
-    console.log('[Shotgun Prompter] Entering createModal function.'); // Лог в начале функции
+    console.log('[Shotgun Prompter] Entering createModal function.');
     if (document.getElementById('shotgun-prompter-modal')) {
-      console.log('[Shotgun Prompter] Modal element already exists in DOM inside createModal. Re-assigning elements.'); // Лог если модальное окно уже в DOM
+      console.log('[Shotgun Prompter] Modal element already exists in DOM inside createModal. Re-assigning elements.');
       assignUIElements();
       loadElementHeights();
       populatePromptTemplateSelect();
       updateFinalPrompt();
       return;
     }
-    console.log('[Shotgun Prompter] Modal element not found in DOM inside createModal. Proceeding with creation.'); // Лог перед созданием элементов
+    console.log('[Shotgun Prompter] Modal element not found in DOM inside createModal. Proceeding with creation.');
     modal = createElementWithProps('div',
         {id: 'shotgun-prompter-modal', class: 'shotgun-modal'});
-    console.log('[Shotgun Prompter] Modal element created in createModal.', modal); // Лог после создания элемента модального окна
+    console.log('[Shotgun Prompter] Modal element created in createModal.', modal);
     const modalContent = createElementWithProps('div',
         {class: 'shotgun-modal-content'});
     const modalHeader = createElementWithProps('div',
@@ -2148,24 +2278,13 @@ Pay attention to the file paths provided in the context.`;
     });
     const fileInputContainer = createElementWithProps('div',
         {class: 'shotgun-file-input-container'});
-
-    fileInput = createElementWithProps('input', {
-      type: 'file',
-      id: 'shotgun-folder-input-el',
-      webkitdirectory: '',
-      directory: '',
-      multiple: '',
-      style: 'display: none;'
-    });
-    fileInput.addEventListener('change', handleLegacyFileSelection);
-
-    const fileInputLabelButton = createElementWithProps('label', {
-      for: 'shotgun-folder-input-el',
-      class: 'shotgun-button',
-      textContent: getText('selectFolderLegacy')
-    });
-    fileInputContainer.appendChild(fileInput);
-    fileInputContainer.appendChild(fileInputLabelButton);
+    leftPanelElement.addEventListener('dragover', handleDragOver);
+    leftPanelElement.addEventListener('dragleave', handleDragLeave);
+    leftPanelElement.addEventListener('drop', handleDrop);
+    leftPanelElement.appendChild(createElementWithProps('div', {
+      class: 'shotgun-drop-zone-overlay',
+      textContent: getText('dropFolderOrFiles')
+    }));
 
     fileApiInputBtn = createElementWithProps('button', {
       id: 'shotgun-folder-api-input-btn',
@@ -2222,7 +2341,7 @@ Pay attention to the file paths provided in the context.`;
       }
     });
     fileReadErrorsDiv.appendChild(clearErrorsBtn);
-    leftPanelElement.appendChild(fileReadErrorsDiv);
+    leftPanelElement.append(fileInputContainer, fileReadErrorsDiv);
 
     const searchInputDiv = createElementWithProps('div',
         {style: 'margin-bottom: 8px; display: flex; align-items: center; gap: 5px;'});
@@ -2595,14 +2714,12 @@ Pay attention to the file paths provided in the context.`;
     panelResizerElement = createElementWithProps('div',
         {id: 'shotgun-panel-resizer-el', class: 'shotgun-panel-resizer'});
 
-    // !!! ДОБАВЛЯЕМ ЭТОТ СЛУШАТЕЛЬ !!!
     if(panelResizerElement) {
         panelResizerElement.addEventListener('mousedown', onPanelResizeStart);
         panelResizerElement.addEventListener('touchstart', (event) => {
              if (event.touches.length === 1) onPanelResizeStart(event.touches[0]);
-        }); // Добавляем поддержку тач-событий
+        });
     }
-    // !!! КОНЕЦ ДОБАВЛЕНИЯ !!!
 
     rightPanelElement = createElementWithProps('div', {
       id: 'shotgun-right-panel-el',
@@ -2683,19 +2800,19 @@ Pay attention to the file paths provided in the context.`;
     modalContent.appendChild(modalBody);
     modalContent.appendChild(modalFooter);
     modal.appendChild(modalContent);
-    console.log('[Shotgun Prompter] Modal content appended to modal element.'); // Лог перед добавлением в body
+    console.log('[Shotgun Prompter] Modal content appended to modal element.');
     if (document.body) {
       document.body.appendChild(modal);
-      console.log('[Shotgun Prompter] Modal appended to document body.'); // Лог после добавления в body
+      console.log('[Shotgun Prompter] Modal appended to document body.');
     } else {
-      console.error('[Shotgun Prompter] document.body is not available. Cannot append modal.'); // Лог если body не доступен
-      return; // Прерываем выполнение функции, если body нет
+      console.error('[Shotgun Prompter] document.body is not available. Cannot append modal.');
+      return;
     }
     assignUIElements();
     loadElementHeights();
     populatePromptTemplateSelect();
     updateFinalPrompt();
-    console.log('[Shotgun Prompter] UI elements assigned and initial setup done in createModal.'); // Лог после assignUIElements и начальной настройки
+    console.log('[Shotgun Prompter] UI elements assigned and initial setup done in createModal.');
 
     if (insertPromptBtn) {
       insertPromptBtn.addEventListener('click',
@@ -2739,7 +2856,7 @@ Pay attention to the file paths provided in the context.`;
           }, 500));
     }
     updateAutoUpdateCheckboxState();
-    console.log('[Shotgun Prompter] Exiting createModal function.'); // Лог перед выходом из функции
+    console.log('[Shotgun Prompter] Exiting createModal function.');
   }
 
   function updateLoadedGitignoreDisplay() {
@@ -2907,12 +3024,20 @@ Pay attention to the file paths provided in the context.`;
       const selectedLang = settingsLanguageSelect.value;
       GM_setValue(CURRENT_LANG_KEY, selectedLang);
       currentLang = selectedLang;
-      if (modal && modal.style.display === 'block') {
-        assignUIElements();
-        loadElementHeights();
-        populatePromptTemplateSelect();
-        updateFinalPrompt();
-      }
+      loadLocalization(currentLang).then(() => {
+        if (modal && modal.style.display === 'block') {
+          assignUIElements();
+          loadElementHeights();
+          populatePromptTemplateSelect();
+          updateFinalPrompt();
+          // Добавляем обновление текста кнопок и меток после смены языка
+          updateModalTextContent();
+        }
+        if (settingsModal && settingsModal.style.display === 'block') {
+            loadSettings();
+        }
+        updateStatus(getText('languageSaved'));
+      });
     }
     if(settingsFontSizeSelect) {
       let fontSizeToSave = DEFAULT_FONT_SIZE;
@@ -3081,25 +3206,28 @@ Pay attention to the file paths provided in the context.`;
       currentLang = 'ru';
       GM_setValue(CURRENT_LANG_KEY, currentLang);
       GM_deleteValue(FONT_SIZE_KEY);
-      if (settingsModal && settingsModal.style.display === 'block') {
-        loadSettings();
-      }
-      if (modal && modal.style.display === 'block') {
-        assignUIElements();
-        loadElementHeights();
+      fetchedLanguages = {};
+      loadLocalization(currentLang).then(() => {
+        if (settingsModal && settingsModal.style.display === 'block') {
+          loadSettings();
+        }
+        if (modal && modal.style.display === 'block') {
+          assignUIElements();
+          loadElementHeights();
+          populatePromptTemplateSelect();
+          updateFinalPrompt();
+        }
         populatePromptTemplateSelect();
+        if (folderInputLabel) {
+          folderInputLabel.textContent = getText('folderNotSelected');
+        }
+        loadElementHeights();
+        if (leftPanelElement) {
+          leftPanelElement.style.flexBasis = '40%';
+        }
         updateFinalPrompt();
-      }
-      populatePromptTemplateSelect();
-      if (folderInputLabel) {
-        folderInputLabel.textContent = getText('folderNotSelected');
-      }
-      loadElementHeights();
-      if (leftPanelElement) {
-        leftPanelElement.style.flexBasis = '40%';
-      }
-      updateFinalPrompt();
-      updateStatus(getText("allSettingsReset"), false);
+        updateStatus(getText("allSettingsReset"), false);
+      });
     }
   }
 
@@ -3160,22 +3288,24 @@ Pay attention to the file paths provided in the context.`;
         currentLang = GM_getValue(CURRENT_LANG_KEY, 'ru');
         const importedFontSize = GM_getValue(FONT_SIZE_KEY, DEFAULT_FONT_SIZE);
 
-        if (modal && modal.style.display === 'block') {
-          assignUIElements();
-          loadElementHeights();
-          populatePromptTemplateSelect();
-          updateFinalPrompt();
-          if (folderInputLabel) {
-            folderInputLabel.textContent = lastSelectedFolderName
-                ? `${getText("lastFolder")} ${lastSelectedFolderName}`
-                : getText('folderNotSelected');
+        loadLocalization(currentLang).then(() => {
+          if (modal && modal.style.display === 'block') {
+            assignUIElements();
+            loadElementHeights();
+            populatePromptTemplateSelect();
+            updateFinalPrompt();
+            if (folderInputLabel) {
+              folderInputLabel.textContent = lastSelectedFolderName
+                  ? `${getText("lastFolder")} ${lastSelectedFolderName}`
+                  : getText('folderNotSelected');
+            }
           }
-        }
-        if (settingsModal && settingsModal.style.display === 'block') {
-          loadSettings();
-        }
-        updateStatus(
-            getText("settingsSuccessfullyImported", settingsApplied));
+          if (settingsModal && settingsModal.style.display === 'block') {
+            loadSettings();
+          }
+          updateStatus(
+              getText("settingsSuccessfullyImported", settingsApplied));
+        });
       } catch (error) {
         updateStatus(getText("errorImportingSettings") + " " + getText("invalidJsonFile"), true);
       } finally {
@@ -3506,8 +3636,9 @@ Pay attention to the file paths provided in the context.`;
 
       settingsGrid.appendChild(createElementWithProps('label', {textContent: getText('language'), for: 'shotgun-language-select'}));
       settingsLanguageSelect = createElementWithProps('select', {id: 'shotgun-language-select', class: 'shotgun-select'});
-      for (const langKey in LANGUAGES) {
-          const langInfo = LANGUAGES[langKey];
+      const combinedLangs = getCombinedLanguages();
+      for (const langKey in combinedLangs) {
+          const langInfo = combinedLangs[langKey];
           const option = createElementWithProps('option', {value: langKey, textContent: langInfo.name});
           settingsLanguageSelect.appendChild(option);
       }
@@ -3515,7 +3646,18 @@ Pay attention to the file paths provided in the context.`;
           const selectedLang = event.target.value;
           GM_setValue(CURRENT_LANG_KEY, selectedLang);
           currentLang = selectedLang;
-           updateStatus(getText('languageSaved'));
+          loadLocalization(currentLang).then(() => {
+            if (modal && modal.style.display === 'block') {
+              assignUIElements();
+              loadElementHeights();
+              populatePromptTemplateSelect();
+              updateFinalPrompt();
+            }
+            if (settingsModal && settingsModal.style.display === 'block') {
+                loadSettings();
+            }
+            updateStatus(getText('languageSaved'));
+          });
       });
       settingsGrid.appendChild(settingsLanguageSelect);
 
@@ -3771,64 +3913,56 @@ Pay attention to the file paths provided in the context.`;
   }
 
   function injectMainButton() {
-    console.log('[Shotgun Prompter] Trying to inject main button.'); // Лог перед попыткой инъекции
-    const btn = document.getElementById('shotgun-prompter-btn'); // Получаем кнопку, если она уже есть
+    console.log('[Shotgun Prompter] Trying to inject main button.');
+    const btn = document.getElementById('shotgun-prompter-btn');
 
     if (btn) {
-      console.log('[Shotgun Prompter] Button already exists. Skipping injection.'); // Лог если кнопка уже есть
+      console.log('[Shotgun Prompter] Button already exists. Skipping injection.');
       return;
     }
 
-    // Если кнопки нет, создаем ее
     const newBtn = document.createElement('button');
     newBtn.id = 'shotgun-prompter-btn';
     newBtn.textContent = 'Shotgun Prompter';
-    console.log('[Shotgun Prompter] Button element created.', newBtn); // Лог после создания элемента кнопки
+    console.log('[Shotgun Prompter] Button element created.', newBtn);
 
-    // Добавляем обработчик клика к новой кнопке
-    newBtn.addEventListener('click', async () => { // Сделаем обработчик async на случай, если понадобится await
+    newBtn.addEventListener('click', async () => {
       console.log('[Shotgun Prompter] Button clicked.');
 
-      // !!! Отключаем кнопку в самом начале !!!
       newBtn.disabled = true;
       console.log('[Shotgun Prompter] Button disabled.');
 
       try {
-        // Проверяем наличие модального окна по ID в DOM
         let existingModalElement = document.getElementById('shotgun-prompter-modal');
 
         if (!existingModalElement) {
-          console.log('[Shotgun Prompter] Modal element not found in DOM. Creating modal.'); // Лог перед созданием модального окна
-          createModal(); // Создаем и добавляем в DOM
-          existingModalElement = document.getElementById('shotgun-prompter-modal'); // Снова получаем из DOM
-          console.log('[Shotgun Prompter] createModal() called and element re-fetched from DOM.', existingModalElement); // Лог после вызова createModal и повторного получения элемента
+          console.log('[Shotgun Prompter] Modal element not found in DOM. Creating modal.');
+          createModal();
+          existingModalElement = document.getElementById('shotgun-prompter-modal');
+          console.log('[Shotgun Prompter] createModal() called and element re-fetched from DOM.', existingModalElement);
         } else {
            console.log('[Shotgun Prompter] Modal element found in DOM.');
         }
 
-        // !!! Вызываем assignUIElements() ЗДЕСЬ, после того как existingModalElement гарантированно существует !!!
         if (existingModalElement) {
-          modal = existingModalElement; // Обновляем глобальную переменную modal
-          assignUIElements(); // Обновляем все остальные глобальные переменные UI элементов
+          modal = existingModalElement;
+          assignUIElements();
           console.log('[Shotgun Prompter] UI elements assigned/re-assigned.');
 
           console.log('[Shotgun Prompter] Modal element found after logic. Setting display to block.');
           existingModalElement.style.display = 'block';
 
-          // Обновляем глобальную переменную modal, если она еще не была обновлена
-          // (хотя assignUIElements должен это делать) - это на всякий случай
           modal = existingModalElement;
 
           if (isModalMinimized) {
-            console.log('[Shotgun Prompter] Modal minimized, toggling minimize.'); // Лог если окно было свернуто
+            console.log('[Shotgun Prompter] Modal minimized, toggling minimize.');
             toggleMinimizeModal();
           } else {
-            console.log('[Shotgun Prompter] Loading modal position and size.'); // Лог перед загрузкой позиции/размера
+            console.log('[Shotgun Prompter] Loading modal position and size.');
             loadModalPositionAndSize(
                 modal, MODAL_SIZE_KEY, MODAL_POSITION_KEY);
           }
 
-          // Обновление содержимого модального окна после его открытия
           const mainIgnoreRulesTA = document.getElementById(
               'shotgun-main-ignore-rules-ta');
           if (mainIgnoreRulesTA) {
@@ -3837,7 +3971,7 @@ Pay attention to the file paths provided in the context.`;
             const initialUseRules = GM_getValue(USE_GITIGNORE_RULES_KEY, true);
             mainIgnoreRulesTA.disabled = !initialUseRules;
             mainIgnoreRulesTA.style.backgroundColor = !initialUseRules ? '#e9ecef' : '#fff';
-            mainIgnoreRulesTA.style.color = !initialUseRules ? '#6c757d' : '#202124';
+            mainIgnoreRulesTA.style.color = !initialUseRules ? '#6c737d' : '#202124';
           }
           if (useGitignoreCheckbox) {
             useGitignoreCheckbox.checked = GM_getValue(
@@ -3861,22 +3995,21 @@ Pay attention to the file paths provided in the context.`;
           console.log('[Shotgun Prompter] Modal display set to block and updates/renders called.');
 
         } else {
-          console.error('[Shotgun Prompter] Modal element not found or is null after click handler logic.'); // Лог если модальное окно все еще не найдено
+          console.error('[Shotgun Prompter] Modal element not found or is null after click handler logic.');
           updateStatus(getText("errorDisplayingModal"), true);
         }
       } finally {
-          // !!! Включаем кнопку обратно после завершения попытки открыть окно !!!
           newBtn.disabled = false;
           console.log('[Shotgun Prompter] Button enabled.');
       }
     });
 
-    // Добавляем новую кнопку в body
     if (document.body) {
       document.body.appendChild(newBtn);
-      console.log('[Shotgun Prompter] Button appended to body.', newBtn); // Лог после добавления кнопки в DOM
+      console.log('[Shotgun Prompter] Button appended to body.', newBtn);
     } else {
-      console.error('[Shotgun Prompter] document.body is not available. Cannot append button.'); // Лог если body не доступен
+      console.error('[Shotgun Prompter] document.body is not available. Cannot append button.');
+      return;
     }
   }
 
@@ -4033,10 +4166,65 @@ Pay attention to the file paths provided in the context.`;
              .shotgun-reset-height-icon:hover {
                  background-color: #e8eaed;
              }
+             .shotgun-left-panel.drag-over {
+                border: 2px dashed #1a73e8;
+                background-color: #e8f0fe;
+                position: relative; /* Добавляем позиционирование */
+            }
+            .shotgun-drop-zone-overlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background-color: rgba(255, 255, 255, 0.8);
+                z-index: 10; /* Над другими элементами */
+                font-size: 1.5em; /* Увеличиваем шрифт */
+                color: #1a73e8;
+                pointer-events: none; /* Не мешать событиям drag/drop на панель */
+                text-align: center;
+                padding: 20px; /* Добавляем отступы */
+                box-sizing: border-box;
+            }
         `);
   }
 
-  function init() {
+  async function loadLocalization(langCode) {
+    const url = GITHUB_RAW_CONTENT_URL + LOCALE_FILE_PATTERN.replace('%1', langCode) + "?t=" + Date.now();
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: url,
+        onload: function (response) {
+          try {
+            const localeData = JSON.parse(response.responseText);
+            // Изменена логика проверки формата
+            if (localeData && typeof localeData === 'object' && Object.keys(localeData).length > 0) {
+              fetchedLanguages[langCode] = { name: langCode, texts: localeData }; // Используем langCode как name и сам объект как texts
+              console.log(`[Shotgun Prompter] Loaded localization for ${langCode}.`);
+            } else {
+              console.warn(`[Shotgun Prompter] Invalid locale file format or empty for ${langCode}.`);
+              fetchedLanguages[langCode] = { name: langCode, texts: {} };
+            }
+          } catch (e) {
+            console.error(`[Shotgun Prompter] Failed to parse locale file for ${langCode}:`, e);
+             fetchedLanguages[langCode] = { name: langCode, texts: {} };
+          }
+          resolve();
+        },
+        onerror: function () {
+          console.error(`[Shotgun Prompter] Failed to fetch locale file for ${langCode}.`);
+           fetchedLanguages[langCode] = { name: langCode, texts: {} };
+          resolve();
+        }
+      });
+    });
+  }
+
+  async function init() {
     if (scriptInitialized) {
       return;
     }
@@ -4068,10 +4256,8 @@ Pay attention to the file paths provided in the context.`;
       }
 
       currentLang = GM_getValue(CURRENT_LANG_KEY, 'ru');
-      if (!LANGUAGES[currentLang]) {
-        currentLang = 'ru';
-        GM_setValue(CURRENT_LANG_KEY, currentLang);
-      }
+
+      await loadLocalization(currentLang);
 
       injectStyles();
       injectMainButton();
@@ -4112,4 +4298,65 @@ Pay attention to the file paths provided in the context.`;
   }
 
   runInitialization();
+
+  // Добавляем новую функцию для обновления текста элементов UI после смены языка
+  function updateModalTextContent() {
+      if (!modal) return;
+
+      // Обновляем текст кнопок и меток
+      if (fileApiInputBtn) fileApiInputBtn.textContent = getText('selectFolderApi');
+      if (folderInputLabel) {
+          folderInputLabel.textContent = lastSelectedFolderName
+              ? `${getText("lastFolder")} ${lastSelectedFolderName}`
+              : getText('folderNotSelected');
+      }
+      if (refreshApiFolderBtn) refreshApiFolderBtn.textContent = getText('refreshApi');
+      if (fileSearchInput) fileSearchInput.placeholder = getText('searchFilesPlaceholder');
+      if (fileReadErrorsDiv && fileReadErrorsDiv.querySelector('h4')) {
+          fileReadErrorsDiv.querySelector('h4').textContent = getText('fileReadErrors');
+      }
+      const clearErrorsBtn = fileReadErrorsDiv ? fileReadErrorsDiv.querySelector('button') : null;
+      if (clearErrorsBtn) clearErrorsBtn.textContent = getText('clearErrors');
+
+      const dropZoneOverlay = modal.querySelector('.shotgun-drop-zone-overlay');
+       if (dropZoneOverlay) {
+           dropZoneOverlay.textContent = getText('dropFolderOrFiles');
+       }
+
+
+      if (fileListDiv && fileListDiv.previousElementSibling && fileListDiv.previousElementSibling.querySelector('h4')) {
+           fileListDiv.previousElementSibling.querySelector('h4').textContent = getText('selectedFiles');
+      }
+
+      // Обновляем текст кнопок управления файлами (Expand/Collapse/Select/Deselect)
+      const fileListControls = modal.querySelector('.shotgun-file-list-controls');
+      if(fileListControls) {
+          const buttons = fileListControls.querySelectorAll('button');
+          if(buttons.length >= 4) {
+              buttons[0].textContent = getText('expandAll');
+              buttons[1].textContent = getText('collapseAll');
+              buttons[2].textContent = getText('selectAll');
+              buttons[3].textContent = getText('deselectAll');
+          }
+      }
+
+      // Обновляем заголовки тектарей и кнопки копирования
+      const contextHeader = modal.querySelector('#shotgun-context-textarea-el').previousElementSibling;
+      if(contextHeader && contextHeader.querySelector('h4')) contextHeader.querySelector('h4').textContent = getText('context');
+      const userTaskHeader = modal.querySelector('#shotgun-user-task-el').previousElementSibling;
+      if(userTaskHeader && userTaskHeader.querySelector('h4')) userTaskHeader.querySelector('h4').textContent = getText('yourTaskForAi');
+      const promptTemplateHeader = modal.querySelector('#shotgun-prompt-template-select-el').previousElementSibling;
+      if(promptTemplateHeader && promptTemplateHeader.tagName === 'H4') promptTemplateHeader.textContent = getText('promptTemplate');
+      const finalPromptHeader = modal.querySelector('#shotgun-final-prompt-el').previousElementSibling;
+       if(finalPromptHeader && finalPromptHeader.querySelector('h4')) finalPromptHeader.querySelector('h4').textContent = getText('finalPromptText');
+
+
+      // Обновляем текст кнопок Generate и Insert
+      if (generateContextBtn) generateContextBtn.textContent = getText('generateContext');
+      if (insertPromptBtn) insertPromptBtn.textContent = getText('insertIntoAiStudio');
+
+      // Обновляем текст в футере
+      if (statusDiv) statusDiv.textContent = getText('ready'); // Or appropriate status
+      // Version status is handled by checkforupdates, may not need manual update here
+  }
 })();

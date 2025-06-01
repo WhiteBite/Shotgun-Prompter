@@ -137,7 +137,6 @@
   "medium": "Medium",
   "large": "Large",
   "custom": "Custom:",
-  "resetHeight": "Reset height",
   "selectFolderLegacy": "Select Folder (Legacy)",
   "selectFolderApi": "Select Folder (API)",
   "apiSupportedTooltip": "Use File System Access API (recommended)",
@@ -154,5 +153,6 @@
   "failedToCopyToClipboard": "Failed to copy to clipboard!",
   "shotgunPrompterSettings": "Shotgun Prompter Settings",
   "ignoreRulesDetails": "Ignore Rules Details",
-  "languageAndAppearance": "Language & Appearance"
+  "languageAndAppearance": "Language & Appearance",
+  "dropFolderOrFiles": "Drop folder or files here"
 } 

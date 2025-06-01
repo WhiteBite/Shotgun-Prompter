@@ -153,6 +153,7 @@
   "errorReadingFileDetail": "Ошибка чтения %1 (%2)",
   "failedToCopyToClipboard": "Не удалось скопировать в буфер обмена!",
   "shotgunPrompterSettings": "Настройки Shotgun Prompter",
-  "ignoreRulesDetails": "Подробности правил игнорирования",
-  "languageAndAppearance": "Язык и внешний вид"
+  "ignoreRulesDetails": "Подробности Правил Игнорирования",
+  "languageAndAppearance": "Язык и Внешний Вид",
+  "dropFolderOrFiles": "Перетащите папку или файлы сюда"
 } 
